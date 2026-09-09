@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "generator": {
+    "name": "contextbridge",
+    "version": "0.1.0-dev"
+  },
+  "project": {
+    "name": "Context-Bridge",
+    "repository": "ukyovfx/Context-Bridge",
+    "profile": "openai"
+  },
+  "lifecycle": {
+    "created_by_contextbridge": true,
+    "local_only": false
+  },
+  "files": [
+    {
+      "path": ".gitattributes",
+      "sha256": "07975fd056e92afa7449a1836a9816ef28564272896807cff8eeeb63d8cec7b7"
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "c5b2ab651672845cef1f3e910ebb3b2dcded2b686ae321144eb541ac43a28db3"
+    },
+    {
+      "path": "AGENTS.md",
+      "sha256": "ced2343a3f074936cd69a3e9da918d940ec761537a2869c81dbc93742dbec1e6"
+    },
+    {
+      "path": "CHATGPT-PROJECT-INSTRUCTIONS.md",
+      "sha256": "eba2b635c01b5b341f73359767f6bfece62e64a9abc9c467ca0645181f5b9173"
+    },
+    {
+      "path": "docs/agent/CURRENT-STATE.md",
+      "sha256": "d9d49f62b5028952e4ac0fed93150c84a70fc444840b2b109245bdbd42f729a0"
+    },
+    {
+      "path": "docs/agent/START-HERE.md",
+      "sha256": "73dbdc1711b65a561fe60151bedff7f3d04138d3e6294245390b135ed1c5b8da"
+    },
+    {
+      "path": "docs/agent/plans/active/.gitkeep",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    }
+  ]
+}
