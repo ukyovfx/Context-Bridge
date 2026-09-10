@@ -1,13 +1,23 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "generator": {
     "name": "contextbridge",
     "version": "0.1.0-dev"
   },
   "project": {
-    "name": "Context-Bridge",
+    "id": "prj_f352ba2a-a4e6-4c78-931a-345ad2a51a01",
+    "name": "Context Bridge",
     "repository": "ukyovfx/Context-Bridge",
     "profile": "openai"
+  },
+  "repository_identity": {
+    "id": "repo_48d332bb-c45b-456a-b415-fed654434ee7",
+    "identity": {
+      "host": "github.com",
+      "path": "ukyovfx/Context-Bridge"
+    },
+    "primary_remote_name": "origin",
+    "canonical_branch": "main"
   },
   "lifecycle": {
     "created_by_contextbridge": true,
@@ -16,31 +26,33 @@
   "files": [
     {
       "path": ".gitattributes",
-      "sha256": "07975fd056e92afa7449a1836a9816ef28564272896807cff8eeeb63d8cec7b7"
+      "sha256": "07975fd056e92afa7449a1836a9816ef28564272896807cff8eeeb63d8cec7b7",
+      "kind": "generated_template"
     },
     {
       "path": ".gitignore",
-      "sha256": "c5b2ab651672845cef1f3e910ebb3b2dcded2b686ae321144eb541ac43a28db3"
+      "sha256": "c5b2ab651672845cef1f3e910ebb3b2dcded2b686ae321144eb541ac43a28db3",
+      "kind": "generated_template"
     },
     {
       "path": "AGENTS.md",
-      "sha256": "ced2343a3f074936cd69a3e9da918d940ec761537a2869c81dbc93742dbec1e6"
+      "sha256": "585bb060bc7f0acd9fabe4a773c66d9438d3b41f29f0990dddf82a9a2bc948c7",
+      "kind": "generated_template"
     },
     {
       "path": "CHATGPT-PROJECT-INSTRUCTIONS.md",
-      "sha256": "eba2b635c01b5b341f73359767f6bfece62e64a9abc9c467ca0645181f5b9173"
-    },
-    {
-      "path": "docs/agent/CURRENT-STATE.md",
-      "sha256": "0f3453f13bee349e439a548d8e96094dd29095e4dadf7ca1100e474c753964dc"
+      "sha256": "eba2b635c01b5b341f73359767f6bfece62e64a9abc9c467ca0645181f5b9173",
+      "kind": "generated_template"
     },
     {
       "path": "docs/agent/START-HERE.md",
-      "sha256": "73dbdc1711b65a561fe60151bedff7f3d04138d3e6294245390b135ed1c5b8da"
+      "sha256": "b61ae3ad004a89f9b8109419541603c4e9e131dabf4acab5f10d90aee9b0681c",
+      "kind": "generated_template"
     },
     {
       "path": "docs/agent/plans/active/.gitkeep",
-      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "kind": "generated_template"
     }
   ]
 }
