@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ukyovfx/Context-Bridge/internal/knowledge"
 )
@@ -166,6 +167,75 @@ func TestAcceptedStatePlanDowngradesWhenVerificationDoesNotPass(t *testing.T) {
 	if result.Proposal == nil || result.Proposal.EffectiveClass != knowledge.ClassActive || !strings.HasPrefix(result.Proposal.Reason, writebackReasonAcceptedDowngraded) {
 		t.Fatalf("accepted state was not downgraded: %#v", result.Proposal)
 	}
+}
+
+func TestAcceptedStatePromotesOnlyAfterAllGatesPass(t *testing.T) {
+	fixture := newAcceptedWritebackFixture(t)
+	t.Setenv("CONTEXTBRIDGE_HOME", fixture.registryHome)
+	var planned, stderr bytes.Buffer
+	if code := Run([]string{"writeback", "plan", fixture.project.ID, "--class", "accepted_state", "--summary", "Accepted smoke state", "--json"}, &planned, &stderr, "test"); code != 0 {
+		t.Fatalf("accepted-state plan failed: %s", stderr.String())
+	}
+	var plan writebackResult
+	if err := json.Unmarshal(planned.Bytes(), &plan); err != nil {
+		t.Fatal(err)
+	}
+	if plan.Proposal == nil || plan.Proposal.EffectiveClass != knowledge.ClassAcceptedState || plan.Proposal.Destination != "docs/agent/CURRENT-STATE.md" {
+		t.Fatalf("accepted-state plan did not pass all gates: %#v", plan.Proposal)
+	}
+	proposalPath := filepath.Join(t.TempDir(), "proposal.json")
+	if err := os.WriteFile(proposalPath, planned.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var applied bytes.Buffer
+	if code := Run([]string{"writeback", "apply", "--proposal", proposalPath, "--json"}, &applied, &stderr, "test"); code != 0 {
+		t.Fatalf("accepted-state apply failed: %s\n%s", stderr.String(), applied.String())
+	}
+	if !strings.Contains(applied.String(), `"status":"applied"`) || !strings.Contains(applied.String(), `"bytes_written":`) {
+		t.Fatalf("unexpected accepted-state apply: %s", applied.String())
+	}
+	currentState, err := os.ReadFile(filepath.Join(fixture.repository, "docs", "agent", "CURRENT-STATE.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(currentState), "Accepted smoke state") || !strings.Contains(string(currentState), "contextbridge-writeback:") {
+		t.Fatalf("accepted state was not recorded: %s", currentState)
+	}
+}
+
+func newAcceptedWritebackFixture(t *testing.T) handoffFixture {
+	t.Helper()
+	fixture := newHandoffFixture(t)
+	verification := "# Start\n\n## Verification route\n- Clean check: `git status --porcelain`\n"
+	if err := os.WriteFile(filepath.Join(fixture.repository, "AGENTS.md"), []byte("# Instructions\n\n## Verification\n- git status --porcelain\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fixture.repository, "docs", "agent", "START-HERE.md"), []byte(verification), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runTestGit(t, fixture.repository, "add", "AGENTS.md", "docs/agent/START-HERE.md")
+	runTestGit(t, fixture.repository, "commit", "-m", "verification contract")
+	basis := strings.TrimSpace(string(runGitOutput(t, fixture.repository, "rev-parse", "HEAD")))
+	statePath := filepath.Join(fixture.repository, "docs", "agent", "CURRENT-STATE.md")
+	data, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
+	for index, line := range lines {
+		if strings.HasPrefix(line, "basis_commit:") {
+			lines[index] = "basis_commit: " + basis
+		}
+		if strings.HasPrefix(line, "basis_date:") {
+			lines[index] = "basis_date: " + time.Now().UTC().Format(time.RFC3339)
+		}
+	}
+	if err := os.WriteFile(statePath, []byte(strings.Join(lines, "\n")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runTestGit(t, fixture.repository, "add", "docs/agent/CURRENT-STATE.md")
+	runTestGit(t, fixture.repository, "commit", "-m", "refresh state provenance")
+	return fixture
 }
 
 func TestWritebackApplyAbortsWhenIdentityChanges(t *testing.T) {
