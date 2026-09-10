@@ -41,7 +41,9 @@ Configuration is supplied by flags or environment variables:
 
 `guard` re-probes the selected workspace and compares its canonical path, Git root, git-dir, git-common-dir, normalized primary remote, and branch policy against the registry. Any missing, ambiguous, or changed identity fails closed as `WRONG_WORKSPACE`; there is no force override. This guarantee applies to Context Bridge-mediated mutations and does not physically prevent unrelated software from writing directly.
 
-`discover` scans only an explicit bounded root, does not follow symlinks or Windows reparse points, does not fetch, and never changes repositories or the registry. Unique-work and cross-clone results are explicitly local-evidence-only.
+`discover` scans only an explicit bounded root, does not follow symlinks or Windows reparse points, does not fetch, and never changes repositories or the registry. The default bounds are depth 8, 256 repositories, 100,000 entries, and 15 seconds. Every completed scan emits a terminal status: `success`, `success_with_warnings`, `partial`, `no_candidates`, or `failed`. Unique-work and cross-clone results are explicitly local-evidence-only.
+
+JSON discovery always includes the requested root, terminal status, candidate and skipped counts, traversal-limit state, warnings, and errors. Human output always ends with the same terminal summary. Stable scan reasons include `ACCESS_DENIED`, `REPARSE_POINT_SKIPPED`, `MAX_DEPTH_REACHED`, `ENTRY_LIMIT_REACHED`, `PROBE_FAILED`, `ROOT_NOT_FOUND`, and `TIME_LIMIT_REACHED`.
 
 `doctor` validates Manifest V1 or V2 generated-file provenance and reports `CURRENT-STATE` content integrity, basis validity, and basis freshness separately. A metadata-only state commit may remain fresh; later product changes make the recorded basis stale.
 

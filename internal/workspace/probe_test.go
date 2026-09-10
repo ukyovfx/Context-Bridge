@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ukyovfx/Context-Bridge/internal/core"
+	"github.com/ukyovfx/Context-Bridge/internal/safety"
 )
 
 func git(t *testing.T, directory string, args ...string) string {
@@ -151,7 +152,35 @@ func TestDiscoveryRejectsLinkedRoot(t *testing.T) {
 	if data, err := cmd.CombinedOutput(); err != nil {
 		t.Skipf("junction creation unavailable: %v: %s", err, data)
 	}
-	if _, err := (Discoverer{}).Discover(DiscoveryOptions{Root: junction}); err == nil {
-		t.Fatal("discovery accepted junction root")
+	linked, linkErr := safety.IsLinkOrReparse(junction)
+	if linkErr != nil {
+		t.Fatal(linkErr)
+	}
+	if !linked {
+		t.Fatalf("junction was not identified as reparse point")
+	}
+	result, err := (Discoverer{}).Discover(DiscoveryOptions{Root: junction})
+	if err != nil || result.Status != DiscoveryFailed || len(result.Errors) != 1 || result.Errors[0].Reason != ReasonReparsePointSkipped {
+		t.Fatalf("discovery did not report reparse root: result=%#v err=%v", result, err)
+	}
+}
+
+func TestDiscoveryReportsNestedReparsePointSkipped(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows junction coverage")
+	}
+	root := t.TempDir()
+	realTarget := t.TempDir()
+	junction := filepath.Join(root, "junction")
+	cmd := exec.Command("cmd", "/c", "mklink", "/J", junction, realTarget)
+	if data, err := cmd.CombinedOutput(); err != nil {
+		t.Skipf("junction creation unavailable: %v: %s", err, data)
+	}
+	result, err := (Discoverer{}).Discover(DiscoveryOptions{Root: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != DiscoveryPartial || !hasDiscoveryReason(result.Warnings, ReasonReparsePointSkipped) || result.SkippedCount < 1 {
+		t.Fatalf("nested reparse point was not reported: %#v", result)
 	}
 }

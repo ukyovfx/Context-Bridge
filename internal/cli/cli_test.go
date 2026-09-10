@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +12,54 @@ import (
 	"strings"
 	"testing"
 )
+
+func TestDiscoverAlwaysReportsHumanAndJSONTerminalStatus(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CONTEXTBRIDGE_HOME", filepath.Join(root, "registry"))
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"discover", "--root", root}, &stdout, &stderr, "test"); code != 0 {
+		t.Fatalf("human discovery failed: %s", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "terminal_status=no_candidates") {
+		t.Fatalf("human discovery omitted terminal status: %q", stdout.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"discover", "--root", root, "--json"}, &stdout, &stderr, "test"); code != 0 {
+		t.Fatalf("JSON discovery failed: %s", stderr.String())
+	}
+	var result struct {
+		Status         string `json:"status"`
+		CandidateCount int    `json:"candidate_count"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("discovery JSON was invalid: %v\n%s", err, stdout.String())
+	}
+	if result.Status != "no_candidates" || result.CandidateCount != 0 {
+		t.Fatalf("unexpected JSON result: %#v", result)
+	}
+}
+
+func TestDiscoverJSONReportsMissingRoot(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "missing")
+	t.Setenv("CONTEXTBRIDGE_HOME", filepath.Join(t.TempDir(), "registry"))
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"discover", "--root", root, "--json"}, &stdout, &stderr, "test"); code == 0 {
+		t.Fatal("missing root unexpectedly succeeded")
+	}
+	var result struct {
+		Status string `json:"status"`
+		Errors []struct {
+			Reason string `json:"reason"`
+		} `json:"errors"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("failed discovery JSON was invalid: %v\n%s", err, stdout.String())
+	}
+	if result.Status != "failed" || len(result.Errors) != 1 || result.Errors[0].Reason != "ROOT_NOT_FOUND" {
+		t.Fatalf("unexpected missing-root result: %#v", result)
+	}
+}
 
 func TestInitDryRunPerformsZeroMutation(t *testing.T) {
 	root := t.TempDir()

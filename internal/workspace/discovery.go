@@ -1,7 +1,6 @@
 package workspace
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"sort"
@@ -15,13 +14,45 @@ import (
 const (
 	defaultMaxDepth        = 8
 	defaultMaxRepositories = 256
+	defaultMaxEntries      = 100000
+	defaultMaxDuration     = 15 * time.Second
 )
 
 type DiscoveryOptions struct {
 	Root            string
 	MaxDepth        int
 	MaxRepositories int
+	MaxEntries      int
+	MaxDuration     time.Duration
 	Registry        core.Registry
+}
+
+type DiscoveryStatus string
+
+const (
+	DiscoverySuccess             DiscoveryStatus = "success"
+	DiscoverySuccessWithWarnings DiscoveryStatus = "success_with_warnings"
+	DiscoveryPartial             DiscoveryStatus = "partial"
+	DiscoveryNoCandidates        DiscoveryStatus = "no_candidates"
+	DiscoveryFailed              DiscoveryStatus = "failed"
+)
+
+const (
+	ReasonAccessDenied        = "ACCESS_DENIED"
+	ReasonReparsePointSkipped = "REPARSE_POINT_SKIPPED"
+	ReasonMaxDepthReached     = "MAX_DEPTH_REACHED"
+	ReasonEntryLimitReached   = "ENTRY_LIMIT_REACHED"
+	ReasonProbeFailed         = "PROBE_FAILED"
+	ReasonRootNotFound        = "ROOT_NOT_FOUND"
+	ReasonTimeLimitReached    = "TIME_LIMIT_REACHED"
+	ReasonRepositoryLimit     = "MAX_REPOSITORIES_REACHED"
+	ReasonRegistryReadFailed  = "REGISTRY_READ_FAILED"
+	ReasonProbeEvidence       = "PROBE_EVIDENCE_INCOMPLETE"
+)
+
+type DiscoveryIssue struct {
+	Path   string `json:"path,omitempty"`
+	Reason string `json:"reason"`
 }
 
 type InventoryItem struct {
@@ -49,11 +80,25 @@ type ArtifactIndicator struct {
 }
 
 type DiscoveryResult struct {
-	Root               string              `json:"root"`
-	Items              []InventoryItem     `json:"items"`
-	AccessFailures     []DiscoveryFailure  `json:"access_failures,omitempty"`
-	ArtifactIndicators []ArtifactIndicator `json:"artifact_indicators,omitempty"`
-	LimitReached       bool                `json:"limit_reached"`
+	RequestedRoot         string              `json:"requested_root"`
+	Root                  string              `json:"root"`
+	Status                DiscoveryStatus     `json:"status"`
+	Items                 []InventoryItem     `json:"items"`
+	CandidateCount        int                 `json:"candidate_count"`
+	SkippedCount          int                 `json:"skipped_count"`
+	TraversalLimitReached bool                `json:"traversal_limit_reached"`
+	Warnings              []DiscoveryIssue    `json:"warnings"`
+	Errors                []DiscoveryIssue    `json:"errors"`
+	AccessFailures        []DiscoveryFailure  `json:"access_failures,omitempty"`
+	ArtifactIndicators    []ArtifactIndicator `json:"artifact_indicators,omitempty"`
+	LimitReached          bool                `json:"limit_reached"`
+}
+
+func (r DiscoveryResult) RootOrRequestedRoot() string {
+	if r.Root != "" {
+		return r.Root
+	}
+	return r.RequestedRoot
 }
 
 type Discoverer struct {
@@ -67,27 +112,86 @@ func (d Discoverer) Discover(options DiscoveryOptions) (DiscoveryResult, error) 
 	if options.MaxRepositories <= 0 {
 		options.MaxRepositories = defaultMaxRepositories
 	}
+	if options.MaxEntries <= 0 {
+		options.MaxEntries = defaultMaxEntries
+	}
+	if options.MaxDuration <= 0 {
+		options.MaxDuration = defaultMaxDuration
+	}
+	result := DiscoveryResult{
+		RequestedRoot:      options.Root,
+		Items:              []InventoryItem{},
+		Warnings:           []DiscoveryIssue{},
+		Errors:             []DiscoveryIssue{},
+		AccessFailures:     []DiscoveryFailure{},
+		ArtifactIndicators: []ArtifactIndicator{},
+	}
+	if _, statErr := os.Lstat(options.Root); statErr != nil {
+		result.Status = DiscoveryFailed
+		reason := ReasonAccessDenied
+		if os.IsNotExist(statErr) {
+			reason = ReasonRootNotFound
+		}
+		result.Errors = append(result.Errors, DiscoveryIssue{Path: options.Root, Reason: reason})
+		return result, nil
+	}
 	root, err := CanonicalPath(options.Root)
 	if err != nil {
-		return DiscoveryResult{}, err
+		result.Status = DiscoveryFailed
+		reason := ReasonAccessDenied
+		if os.IsNotExist(err) {
+			reason = ReasonRootNotFound
+		}
+		result.Errors = append(result.Errors, DiscoveryIssue{Path: options.Root, Reason: reason})
+		return result, nil
 	}
+	result.Root = root
 	linked, err := safety.IsLinkOrReparse(options.Root)
 	if err != nil {
-		return DiscoveryResult{}, err
+		result.Status = DiscoveryFailed
+		result.Errors = append(result.Errors, DiscoveryIssue{Path: options.Root, Reason: ReasonAccessDenied})
+		return result, nil
 	}
 	if linked {
-		return DiscoveryResult{}, errors.New("discovery root cannot be a symlink or reparse point")
+		result.Status = DiscoveryFailed
+		result.SkippedCount = 1
+		result.Errors = append(result.Errors, DiscoveryIssue{Path: options.Root, Reason: ReasonReparsePointSkipped})
+		return result, nil
 	}
-	result := DiscoveryResult{Root: root, Items: []InventoryItem{}}
 	seenRoots := map[string]bool{}
+	deadline := time.Now().Add(options.MaxDuration)
+	entriesScanned := 0
+	partial := false
+	addWarning := func(path, reason string) {
+		result.Warnings = append(result.Warnings, DiscoveryIssue{Path: path, Reason: reason})
+	}
+	markLimit := func(path, reason string) {
+		result.LimitReached = true
+		result.TraversalLimitReached = true
+		partial = true
+		addWarning(path, reason)
+	}
 	var scan func(string, int)
 	scan = func(directory string, depth int) {
-		if result.LimitReached || depth > options.MaxDepth {
+		if result.LimitReached {
+			return
+		}
+		if time.Now().After(deadline) {
+			result.SkippedCount++
+			markLimit(directory, ReasonTimeLimitReached)
+			return
+		}
+		if depth > options.MaxDepth {
+			result.SkippedCount++
+			markLimit(directory, ReasonMaxDepthReached)
 			return
 		}
 		entries, readErr := os.ReadDir(directory)
 		if readErr != nil {
-			result.AccessFailures = append(result.AccessFailures, DiscoveryFailure{Path: directory, Reason: "access_denied_or_unreadable"})
+			result.SkippedCount++
+			partial = true
+			result.AccessFailures = append(result.AccessFailures, DiscoveryFailure{Path: directory, Reason: ReasonAccessDenied})
+			addWarning(directory, ReasonAccessDenied)
 			return
 		}
 		hasGit := false
@@ -100,7 +204,9 @@ func (d Discoverer) Discover(options DiscoveryOptions) (DiscoveryResult, error) 
 		if hasGit {
 			probe, probeErr := d.Prober.Probe(directory)
 			if probeErr != nil {
-				result.AccessFailures = append(result.AccessFailures, DiscoveryFailure{Path: directory, Reason: "git_probe_failed"})
+				partial = true
+				result.AccessFailures = append(result.AccessFailures, DiscoveryFailure{Path: directory, Reason: ReasonProbeFailed})
+				addWarning(directory, ReasonProbeFailed)
 			} else if probe.Topology != core.TopologyNonGit && !seenRoots[probe.PathKey] {
 				seenRoots[probe.PathKey] = true
 				info, _ := os.Stat(directory)
@@ -113,26 +219,63 @@ func (d Discoverer) Discover(options DiscoveryOptions) (DiscoveryResult, error) 
 				}
 				applyRegistryIdentity(&item, options.Registry)
 				result.Items = append(result.Items, item)
+				if len(probe.EvidenceErrors) > 0 {
+					partial = true
+					addWarning(directory, ReasonProbeEvidence)
+				}
 				if len(result.Items) >= options.MaxRepositories {
-					result.LimitReached = true
+					markLimit(directory, ReasonRepositoryLimit)
 					return
 				}
 			}
 		}
-		for _, entry := range entries {
-			if result.LimitReached || entry.Name() == ".git" {
+		if !time.Now().Before(deadline) {
+			result.SkippedCount += countDirectories(entries)
+			markLimit(directory, ReasonTimeLimitReached)
+			return
+		}
+		for index, entry := range entries {
+			if result.LimitReached {
+				continue
+			}
+			if entriesScanned >= options.MaxEntries {
+				result.SkippedCount += countDirectories(entries[index:])
+				markLimit(directory, ReasonEntryLimitReached)
+				return
+			}
+			entriesScanned++
+			if time.Now().After(deadline) {
+				result.SkippedCount += countDirectories(entries[index:])
+				markLimit(directory, ReasonTimeLimitReached)
+				return
+			}
+			if entry.Name() == ".git" {
 				continue
 			}
 			path := filepath.Join(directory, entry.Name())
+			linked, linkErr := safety.IsLinkOrReparse(path)
+			if linkErr != nil {
+				if entry.IsDir() {
+					result.SkippedCount++
+					partial = true
+					result.AccessFailures = append(result.AccessFailures, DiscoveryFailure{Path: path, Reason: ReasonAccessDenied})
+					addWarning(path, ReasonAccessDenied)
+				}
+				continue
+			}
+			if linked {
+				result.SkippedCount++
+				partial = true
+				addWarning(path, ReasonReparsePointSkipped)
+				continue
+			}
 			if entry.IsDir() {
-				linked, linkErr := safety.IsLinkOrReparse(path)
-				if linkErr != nil {
-					result.AccessFailures = append(result.AccessFailures, DiscoveryFailure{Path: path, Reason: "metadata_unreadable"})
+				if depth >= options.MaxDepth {
+					result.SkippedCount++
+					markLimit(path, ReasonMaxDepthReached)
 					continue
 				}
-				if !linked {
-					scan(path, depth+1)
-				}
+				scan(path, depth+1)
 				continue
 			}
 			if indicator := artifactIndicator(entry.Name()); indicator != "" {
@@ -142,10 +285,35 @@ func (d Discoverer) Discover(options DiscoveryOptions) (DiscoveryResult, error) 
 	}
 	scan(root, 0)
 	classifyIndependentClones(result.Items)
+	result.CandidateCount = len(result.Items)
+	if len(result.ArtifactIndicators) > 0 {
+		addWarning(result.ArtifactIndicators[0].Path, "ARTIFACT_INDICATOR_FOUND")
+	}
+	if len(result.Errors) > 0 {
+		result.Status = DiscoveryFailed
+	} else if partial || result.TraversalLimitReached || len(result.AccessFailures) > 0 {
+		result.Status = DiscoveryPartial
+	} else if result.CandidateCount == 0 && len(result.Warnings) == 0 {
+		result.Status = DiscoveryNoCandidates
+	} else if len(result.Warnings) > 0 {
+		result.Status = DiscoverySuccessWithWarnings
+	} else {
+		result.Status = DiscoverySuccess
+	}
 	sort.Slice(result.Items, func(i, j int) bool { return result.Items[i].Probe.PathKey < result.Items[j].Probe.PathKey })
 	sort.Slice(result.AccessFailures, func(i, j int) bool { return result.AccessFailures[i].Path < result.AccessFailures[j].Path })
 	sort.Slice(result.ArtifactIndicators, func(i, j int) bool { return result.ArtifactIndicators[i].Path < result.ArtifactIndicators[j].Path })
 	return result, nil
+}
+
+func countDirectories(entries []os.DirEntry) int {
+	count := 0
+	for _, entry := range entries {
+		if entry.IsDir() {
+			count++
+		}
+	}
+	return count
 }
 
 func applyRegistryIdentity(item *InventoryItem, registry core.Registry) {

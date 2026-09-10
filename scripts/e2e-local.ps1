@@ -70,7 +70,9 @@ try {
     $registryBeforeDiscovery = (Get-FileHash -LiteralPath (Join-Path $registryHome 'registry-v1.json') -Algorithm SHA256).Hash
     $discovery = & $binary discover --root $testRoot --json
     if ($LASTEXITCODE -ne 0) { throw 'discovery failed' }
-    $null = $discovery | ConvertFrom-Json
+    $discoveryResult = $discovery | ConvertFrom-Json
+    if ($discoveryResult.status -notin @('success', 'success_with_warnings', 'partial', 'no_candidates')) { throw 'discovery omitted a valid terminal status' }
+    if ($discoveryResult.requested_root -ne $testRoot) { throw 'discovery omitted the requested root' }
     $registryAfterDiscovery = (Get-FileHash -LiteralPath (Join-Path $registryHome 'registry-v1.json') -Algorithm SHA256).Hash
     if ($registryBeforeDiscovery -ne $registryAfterDiscovery) { throw 'discovery mutated registry' }
 
