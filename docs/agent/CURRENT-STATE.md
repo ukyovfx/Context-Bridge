@@ -1,8 +1,8 @@
 ---
 contextbridge_state_schema: 1
 basis_branch: main
-basis_commit: c9d094af14bbbfb50f78abe4c47917f6ecde12ce
-basis_date: 2026-09-10T14:50:46Z
+basis_commit: 35c3f75
+basis_date: 2026-09-10T14:59:55Z
 ---
 
 # Context Bridge Current State
@@ -44,7 +44,7 @@ Status: Knowledge Write-back V1 implemented on top of V1.2.0-rc.1; local verific
 - Packaged binary success-path smoke timing was measured in a trusted temporary fixture: version 20.6 ms median, guard 674.3 ms, handoff 1316.1 ms, doctor --agent codex 2183.7 ms, and instructions --explain --agent codex 1122.7 ms; five runs each, all exit 0
 - RC.1 package metadata reports `contextbridge 1.2.0-rc.1`; release notes are in `docs/releases/v1.2.0-rc.1.md`; no tag or GitHub release was created because hosted CI remains externally blocked
 - Unit and integration tests cover wrong path/Git root/git-dir/common-dir/remote/branch, linked worktrees, independent clones, detached HEAD, local-only unique evidence, and identity change between plan and apply
-- Knowledge Write-back regression coverage proves NONE zero-byte behavior, active and durable routing, deterministic JSON, malformed proposal refusal, secret-like content refusal, identity-change abort, accepted-state downgrade, no automatic Git mutation, and read-only knowledge diagnostics
+- Knowledge Write-back regression coverage proves NONE zero-byte behavior, active and durable routing, deterministic JSON, malformed proposal refusal, secret-like content refusal, identity-change abort, accepted-state downgrade and successful promotion, no automatic Git mutation, and read-only knowledge diagnostics
 - Packaged binary smoke proved registry resolution, NONE plan/apply, ACTIVE plan/apply, canonical active-plan routing, and machine-readable knowledge-doctor warnings in a disposable local fixture
 
 ## GitHub verification
