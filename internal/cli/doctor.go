@@ -74,9 +74,12 @@ func runDoctor(args []string, stdout, stderr io.Writer) error {
 	if manifest.SchemaVersion == 2 && manifest.Repository.PrimaryRemoteName != "" {
 		primaryRemote = manifest.Repository.PrimaryRemoteName
 	}
-	probe, err := (workspace.Prober{PrimaryRemoteName: primaryRemote}).Probe(absProject)
-	if err != nil || probe.Topology == core.TopologyNonGit {
-		return errors.New("project is not a readable Git workspace")
+	probe, probeStatus, probeErr := (workspace.Prober{PrimaryRemoteName: primaryRemote}).ProbeWithStatus(absProject)
+	if probeErr != nil || probeStatus != workspace.ProbeOK {
+		if probeErr != nil {
+			return fmt.Errorf("Git probe failed: %s", probeStatus)
+		}
+		return errors.New(string(probeStatus))
 	}
 	if probe.GitRootKey != probe.PathKey {
 		return errors.New("Git root does not match the project path")

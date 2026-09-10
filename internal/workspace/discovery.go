@@ -38,16 +38,18 @@ const (
 )
 
 const (
-	ReasonAccessDenied        = "ACCESS_DENIED"
-	ReasonReparsePointSkipped = "REPARSE_POINT_SKIPPED"
-	ReasonMaxDepthReached     = "MAX_DEPTH_REACHED"
-	ReasonEntryLimitReached   = "ENTRY_LIMIT_REACHED"
-	ReasonProbeFailed         = "PROBE_FAILED"
-	ReasonRootNotFound        = "ROOT_NOT_FOUND"
-	ReasonTimeLimitReached    = "TIME_LIMIT_REACHED"
-	ReasonRepositoryLimit     = "MAX_REPOSITORIES_REACHED"
-	ReasonRegistryReadFailed  = "REGISTRY_READ_FAILED"
-	ReasonProbeEvidence       = "PROBE_EVIDENCE_INCOMPLETE"
+	ReasonAccessDenied              = "ACCESS_DENIED"
+	ReasonReparsePointSkipped       = "REPARSE_POINT_SKIPPED"
+	ReasonMaxDepthReached           = "MAX_DEPTH_REACHED"
+	ReasonEntryLimitReached         = "ENTRY_LIMIT_REACHED"
+	ReasonProbeFailed               = "PROBE_FAILED"
+	ReasonRootNotFound              = "ROOT_NOT_FOUND"
+	ReasonTimeLimitReached          = "TIME_LIMIT_REACHED"
+	ReasonRepositoryLimit           = "MAX_REPOSITORIES_REACHED"
+	ReasonRegistryReadFailed        = "REGISTRY_READ_FAILED"
+	ReasonProbeEvidence             = "PROBE_EVIDENCE_INCOMPLETE"
+	ReasonGitRepositoryInaccessible = "GIT_REPOSITORY_INACCESSIBLE"
+	ReasonGitProbeFailed            = "GIT_PROBE_FAILED"
 )
 
 type DiscoveryIssue struct {
@@ -202,12 +204,17 @@ func (d Discoverer) Discover(options DiscoveryOptions) (DiscoveryResult, error) 
 			}
 		}
 		if hasGit {
-			probe, probeErr := d.Prober.Probe(directory)
+			probe, probeStatus, probeErr := d.Prober.ProbeWithStatus(directory)
 			if probeErr != nil {
 				partial = true
-				result.AccessFailures = append(result.AccessFailures, DiscoveryFailure{Path: directory, Reason: ReasonProbeFailed})
-				addWarning(directory, ReasonProbeFailed)
-			} else if probe.Topology != core.TopologyNonGit && !seenRoots[probe.PathKey] {
+				reason := ReasonGitProbeFailed
+				result.AccessFailures = append(result.AccessFailures, DiscoveryFailure{Path: directory, Reason: reason})
+				addWarning(directory, reason)
+			} else if probeStatus == ProbeGitRepositoryInaccessible {
+				partial = true
+				result.AccessFailures = append(result.AccessFailures, DiscoveryFailure{Path: directory, Reason: ReasonGitRepositoryInaccessible})
+				addWarning(directory, ReasonGitRepositoryInaccessible)
+			} else if probeStatus == ProbeOK && !seenRoots[probe.PathKey] {
 				seenRoots[probe.PathKey] = true
 				info, _ := os.Stat(directory)
 				item := InventoryItem{Probe: probe, Role: core.RoleUnregistered, States: probe.States()}

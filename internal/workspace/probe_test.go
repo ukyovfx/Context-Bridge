@@ -102,6 +102,25 @@ func TestProbeDetachedAndLocalUniqueWork(t *testing.T) {
 	}
 }
 
+func TestProbeWithStatusDistinguishesNonGitAndInaccessibleGit(t *testing.T) {
+	plain := filepath.Join(t.TempDir(), "plain")
+	if err := os.MkdirAll(plain, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, status, err := (Prober{}).ProbeWithStatus(plain)
+	if err != nil || status != ProbeTargetNotGit {
+		t.Fatalf("plain directory classification = %s, %v", status, err)
+	}
+	untrusted := filepath.Join(t.TempDir(), "untrusted")
+	if err := os.MkdirAll(filepath.Join(untrusted, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, status, err = (Prober{}).ProbeWithStatus(untrusted)
+	if err != nil || status != ProbeGitRepositoryInaccessible {
+		t.Fatalf("Git directory classification = %s, %v", status, err)
+	}
+}
+
 func TestDiscoveryFindsIndependentClonesWithoutMutation(t *testing.T) {
 	root := t.TempDir()
 	one := filepath.Join(root, "one")

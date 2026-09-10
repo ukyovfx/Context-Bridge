@@ -161,9 +161,13 @@ func diagnoseAgent(root, agent string) instructionResult {
 		return result
 	}
 	diagnostics.EffectiveCWD = canonical
-	probe, probeErr := (workspace.Prober{}).Probe(canonical)
-	if probeErr != nil || probe.Topology == core.TopologyNonGit {
-		diagnostics.Errors = append(diagnostics.Errors, diagnosticIssue{Reason: "PROBE_FAILED"})
+	probe, probeStatus, probeErr := (workspace.Prober{}).ProbeWithStatus(canonical)
+	if probeErr != nil || probeStatus != workspace.ProbeOK {
+		reason := string(probeStatus)
+		if reason == "" {
+			reason = "GIT_PROBE_FAILED"
+		}
+		diagnostics.Errors = append(diagnostics.Errors, diagnosticIssue{Reason: reason, Severity: "error", Message: "The workspace could not be verified by Git.", Action: "verify the path and Git access without changing Git configuration."})
 		diagnostics.WorkspaceGuard = readinessUnknown
 	} else {
 		diagnostics.ProjectRoot = probe.GitRoot
@@ -649,7 +653,13 @@ func emitInstructionResult(writer io.Writer, result instructionResult, jsonOutpu
 		}
 	}
 	for _, issue := range d.Errors {
-		fmt.Fprintf(writer, "error reason=%s\n", issue.Reason)
+		fmt.Fprintf(writer, "ERROR %s\n", issue.Reason)
+		if issue.Message != "" {
+			fmt.Fprintf(writer, "  %s\n", issue.Message)
+		}
+		if issue.Action != "" {
+			fmt.Fprintf(writer, "  Action: %s\n", issue.Action)
+		}
 	}
 	if d.Agent == "claude" && d.Claude != nil && !d.Claude.InstructionSourcesDetected {
 		fmt.Fprintln(writer, "Claude instructions: none detected")

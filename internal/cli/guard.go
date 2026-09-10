@@ -43,9 +43,9 @@ func runGuard(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return failGuard(stderr, core.ReasonWorkspacePathMismatch)
 	}
-	probe, err := (workspace.Prober{PrimaryRemoteName: repository.PrimaryRemoteName}).Probe(actualPath)
-	if err != nil {
-		return failGuard(stderr, core.ReasonWorkspacePathMismatch)
+	probe, probeStatus, probeErr := (workspace.Prober{PrimaryRemoteName: repository.PrimaryRemoteName}).ProbeWithStatus(actualPath)
+	if probeErr != nil || probeStatus != workspace.ProbeOK {
+		return failProbe(stderr, string(probeStatus))
 	}
 	expected := guardExpected(project, repository, registered, "")
 	decision := core.EvaluateGuard(expected, core.GuardActual{ProjectFound: true, ProjectID: project.ID, RepositoryID: repository.ID, WorkspaceID: registered.ID, Probe: probe})
@@ -96,6 +96,14 @@ func guardExpected(project core.ProjectRecord, repository core.RepositoryRecord,
 func failGuard(stderr io.Writer, reason core.GuardReason) error {
 	fmt.Fprintf(stderr, "Guard: BLOCKED\nReason: %s\nAction: resolve the project or workspace selection and retry.\n", reason)
 	return core.WrongWorkspaceError{Reasons: []core.GuardReason{reason}}
+}
+
+func failProbe(stderr io.Writer, reason string) error {
+	if reason == "" {
+		reason = string(workspace.ProbeGitProbeFailed)
+	}
+	fmt.Fprintf(stderr, "Guard: BLOCKED\nReason: %s\nAction: verify that the target exists and that Git can read it without changing Git configuration.\n", reason)
+	return errors.New(reason)
 }
 
 type liveGuardVerifier struct {

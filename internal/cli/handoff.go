@@ -34,6 +34,9 @@ const (
 	handoffReasonStateStale                = "STATE_STALE"
 	handoffReasonNoVerificationContract    = "NO_VERIFICATION_CONTRACT"
 	handoffReasonProbeFailed               = "PROBE_FAILED"
+	handoffReasonGitRepositoryInaccessible = "GIT_REPOSITORY_INACCESSIBLE"
+	handoffReasonGitProbeFailed            = "GIT_PROBE_FAILED"
+	handoffReasonTargetNotGit              = "TARGET_NOT_GIT"
 	handoffReasonVerificationUnverified    = "UNVERIFIED"
 )
 
@@ -186,11 +189,18 @@ func runHandoff(args []string, stdout, stderr io.Writer) error {
 		emitHandoffResult(stdout, result, *jsonOutput)
 		return errors.New(handoffReasonWrongWorkspace)
 	}
-	probe, err := (workspace.Prober{PrimaryRemoteName: repository.PrimaryRemoteName}).Probe(canonical)
-	if err != nil {
-		result.Errors = append(result.Errors, handoffIssue{Reason: handoffReasonProbeFailed})
+	probe, probeStatus, probeErr := (workspace.Prober{PrimaryRemoteName: repository.PrimaryRemoteName}).ProbeWithStatus(canonical)
+	if probeErr != nil || probeStatus != workspace.ProbeOK {
+		reason := string(probeStatus)
+		if reason == "" {
+			reason = handoffReasonGitProbeFailed
+		}
+		result.Errors = append(result.Errors, handoffIssue{Reason: reason, Severity: "error", Message: "The workspace exists but Git evidence could not be verified.", Action: "verify Git access without changing Git configuration."})
 		emitHandoffResult(stdout, result, *jsonOutput)
-		return err
+		if probeErr != nil {
+			return probeErr
+		}
+		return errors.New(reason)
 	}
 	expected := guardExpected(project, repository, registered, "")
 	decision := core.EvaluateGuard(expected, core.GuardActual{ProjectFound: true, ProjectID: project.ID, RepositoryID: repository.ID, WorkspaceID: registered.ID, Probe: probe})

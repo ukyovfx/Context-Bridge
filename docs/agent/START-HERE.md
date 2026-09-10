@@ -12,11 +12,11 @@ Context Bridge is a deterministic, local-first bridge for carrying development c
 
 ## V1 boundaries
 
-V1 is a Windows-first CLI. It makes no model or model-provider API calls. Obsidian may display generated Markdown passively, but Context Bridge does not integrate with or write through an Obsidian plugin.
+V1.2 is a Windows-first CLI. It makes no model or model-provider API calls. Obsidian may display generated Markdown passively, but Context Bridge does not integrate with or write through an Obsidian plugin.
 
-The CLI creates new projects only. It does not adopt or migrate existing repositories. Remote creation is limited to the authenticated user's personal GitHub account and always creates a private repository after the local project has been created and committed.
+The CLI creates new projects and supports explicit, confirmed migration plans for existing repositories. Remote creation is limited to the authenticated user's personal GitHub account and always creates a private repository after the local project has been created and committed. Adoption, upgrade, and rebind are never automatic.
 
-V1.1 adds machine-local registration of existing repositories without modifying them. It does not upgrade or adopt their repository contents. Before Context Bridge-mediated writes in a registered workspace, run `contextbridge guard`; `WRONG_WORKSPACE` is a hard stop with no force override.
+V1.1 adds machine-local registration of existing repositories without modifying them. V1.2 adds explicit adopt, upgrade, and rebind plans with confirmation and immediate re-probe. Before Context Bridge-mediated writes in a registered workspace, run `contextbridge guard`; `WRONG_WORKSPACE` is a hard stop with no force override.
 
 ## Verification route
 

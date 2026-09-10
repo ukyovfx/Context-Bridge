@@ -25,9 +25,9 @@ const (
 	reasonWorkspaceAlreadyBound     = "WORKSPACE_ALREADY_BOUND"
 	reasonRepositoryMismatch        = "REPOSITORY_MISMATCH"
 	reasonTargetNotGit              = "TARGET_NOT_GIT"
-	reasonTargetNotFound            = "TARGET_NOT_FOUND"
-	reasonGitRepositoryInaccessible = "GIT_REPOSITORY_INACCESSIBLE"
-	reasonGitProbeFailed            = "GIT_PROBE_FAILED"
+	reasonTargetNotFound            = string(workspace.ProbeTargetNotFound)
+	reasonGitRepositoryInaccessible = string(workspace.ProbeGitRepositoryInaccessible)
+	reasonGitProbeFailed            = string(workspace.ProbeGitProbeFailed)
 	reasonManifestConflict          = "MANIFEST_CONFLICT"
 	reasonAlreadyAdopted            = "ALREADY_ADOPTED"
 	reasonAlreadyUpgraded           = "ALREADY_UPGRADED"
@@ -438,25 +438,12 @@ func buildRebindPlan(selector, target string) (migrationPlan, core.Registry, cor
 }
 
 func probeMigrationTarget(path string) (string, core.WorkspaceProbe, error) {
-	if _, statErr := os.Stat(path); statErr != nil {
-		if errors.Is(statErr, os.ErrNotExist) {
-			return "", core.WorkspaceProbe{}, errors.New(reasonTargetNotFound)
+	probe, status, err := (workspace.Prober{}).ProbeWithStatus(path)
+	if err != nil || status != workspace.ProbeOK {
+		if err != nil {
+			return "", core.WorkspaceProbe{}, errors.New(string(status))
 		}
-		return "", core.WorkspaceProbe{}, errors.New(reasonGitProbeFailed)
-	}
-	canonical, err := workspace.CanonicalPath(path)
-	if err != nil {
-		return "", core.WorkspaceProbe{}, errors.New(reasonGitProbeFailed)
-	}
-	probe, err := (workspace.Prober{}).Probe(canonical)
-	if err != nil {
-		return "", core.WorkspaceProbe{}, errors.New(reasonGitProbeFailed)
-	}
-	if probe.Topology == core.TopologyNonGit || probe.GitRoot == "" {
-		if _, gitErr := os.Stat(filepath.Join(canonical, ".git")); gitErr == nil {
-			return "", core.WorkspaceProbe{}, errors.New(reasonGitRepositoryInaccessible)
-		}
-		return "", core.WorkspaceProbe{}, errors.New(reasonTargetNotGit)
+		return "", core.WorkspaceProbe{}, errors.New(string(status))
 	}
 	return probe.GitRoot, probe, nil
 }

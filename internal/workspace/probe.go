@@ -22,6 +22,16 @@ type GitRunner interface {
 	Output(directory string, args ...string) ([]byte, error)
 }
 
+type ProbeStatus string
+
+const (
+	ProbeOK                        ProbeStatus = "OK"
+	ProbeTargetNotFound            ProbeStatus = "TARGET_NOT_FOUND"
+	ProbeTargetNotGit              ProbeStatus = "TARGET_NOT_GIT"
+	ProbeGitRepositoryInaccessible ProbeStatus = "GIT_REPOSITORY_INACCESSIBLE"
+	ProbeGitProbeFailed            ProbeStatus = "GIT_PROBE_FAILED"
+)
+
 type CommandRunner struct{}
 
 func (CommandRunner) Output(directory string, args ...string) ([]byte, error) {
@@ -35,6 +45,32 @@ func (CommandRunner) Output(directory string, args ...string) ([]byte, error) {
 type Prober struct {
 	Runner            GitRunner
 	PrimaryRemoteName string
+}
+
+// ProbeWithStatus adds a stable, user-facing classification without changing
+// the existing probe shape or bypassing Git's own trust checks.
+func (p Prober) ProbeWithStatus(path string) (core.WorkspaceProbe, ProbeStatus, error) {
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return core.WorkspaceProbe{}, ProbeTargetNotFound, nil
+		}
+		return core.WorkspaceProbe{}, ProbeGitProbeFailed, err
+	}
+	canonical, err := CanonicalPath(path)
+	if err != nil {
+		return core.WorkspaceProbe{}, ProbeGitProbeFailed, err
+	}
+	probe, err := p.Probe(canonical)
+	if err != nil {
+		return core.WorkspaceProbe{}, ProbeGitProbeFailed, err
+	}
+	if probe.Topology == core.TopologyNonGit || probe.GitRoot == "" {
+		if _, gitErr := os.Stat(filepath.Join(canonical, ".git")); gitErr == nil {
+			return probe, ProbeGitRepositoryInaccessible, nil
+		}
+		return probe, ProbeTargetNotGit, nil
+	}
+	return probe, ProbeOK, nil
 }
 
 func (p Prober) Probe(path string) (core.WorkspaceProbe, error) {
