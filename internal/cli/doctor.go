@@ -20,11 +20,15 @@ func runDoctor(args []string, stdout, stderr io.Writer) error {
 	flags := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	projectPath := flags.String("project", "", "Context Bridge project path")
+	agent := flags.String("agent", "", "codex, claude, or cursor instruction diagnostics")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if flags.NArg() != 0 {
 		return errors.New("doctor accepts no positional arguments")
+	}
+	if *agent != "" && !validAgent(*agent) {
+		return errors.New("agent must be codex, claude, or cursor")
 	}
 	if *projectPath == "" {
 		cwd, err := os.Getwd()
@@ -109,6 +113,13 @@ func runDoctor(args []string, stdout, stderr io.Writer) error {
 	if manifest.SchemaVersion == 2 {
 		if err := doctorRegisteredGuard(manifest, probe); err != nil {
 			return err
+		}
+	}
+	if *agent != "" {
+		diagnostics := diagnoseAgent(absProject, *agent)
+		emitInstructionResult(stdout, diagnostics, false)
+		if diagnostics.Status == readinessFailed {
+			return errors.New("instruction diagnostics failed")
 		}
 	}
 	return nil

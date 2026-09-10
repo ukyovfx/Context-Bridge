@@ -37,6 +37,13 @@ try {
 
     & $binary doctor --project $project | Out-Host
     if ($LASTEXITCODE -ne 0) { throw 'doctor failed on a fresh project' }
+    & $binary doctor --project $project --agent codex | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw 'doctor agent diagnostics failed' }
+
+    $instructions = & $binary instructions --explain --project $project --agent codex --json
+    if ($LASTEXITCODE -ne 0) { throw 'instruction diagnostics failed' }
+    $instructionResult = $instructions | ConvertFrom-Json
+    if ($instructionResult.diagnostics.agent -ne 'codex') { throw 'instruction diagnostics agent mismatch' }
 
     $manifest = Get-Content -LiteralPath (Join-Path $project '.contextbridge\manifest.json') -Raw | ConvertFrom-Json
     foreach ($item in $manifest.files) {

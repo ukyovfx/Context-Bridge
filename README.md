@@ -24,6 +24,7 @@ contextbridge registry register <path> [--role canonical|alternate] [--dry-run]
 contextbridge guard --project <id-or-alias> [--workspace <id-or-path>]
 contextbridge discover --root <path> [--json]
 contextbridge handoff <project> --task "<intent>" [--agent codex|claude|cursor] [--json]
+contextbridge instructions --explain [--project PATH] [--agent codex|claude|cursor] [--json]
 contextbridge version
 ```
 
@@ -49,6 +50,8 @@ JSON discovery always includes the requested root, terminal status, candidate an
 `doctor` validates Manifest V1 or V2 generated-file provenance and reports `CURRENT-STATE` content integrity, basis validity, and basis freshness separately. A metadata-only state commit may remain fresh; later product changes make the recorded basis stale.
 
 `handoff` resolves a registered project by exact ID, display name, or alias, selects its registered canonical workspace, re-probes it, and runs the Workspace Guard before emitting a deterministic, read-only handoff. The handoff contains portable project/repository identity, canonical workspace facts, context entrypoint references, task intent, derived verification requirements, accepted-state evidence, and thin adapter hints for Codex, Claude, or Cursor. It never persists a Task or AgentSession, starts an agent, changes the registry, or changes the workspace. Guard failure is a hard `WRONG_WORKSPACE` stop with no runnable handoff. If durable verification instructions are absent, the handoff reports `UNVERIFIED` and `NO_VERIFICATION_CONTRACT` rather than inventing commands.
+
+`instructions --explain` inspects effective instruction sources and safely observable agent environment metadata for Codex, Claude Code, or Cursor. It reports ordered source paths, sizes, SHA-256 hashes, repository containment, basis-change evidence where available, configuration scope, and readiness warnings without copying instruction contents or changing agent configuration. `doctor --agent` adds the same read-only diagnostics to the existing project doctor flow.
 
 ## Identity model
 

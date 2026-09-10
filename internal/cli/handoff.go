@@ -82,6 +82,7 @@ type handoffDocument struct {
 	TaskIntent         string               `json:"task_intent"`
 	Verification       verificationContract `json:"verification"`
 	Guard              handoffGuard         `json:"guard"`
+	AgentDiagnostics   agentDiagnostics     `json:"agent_diagnostics"`
 	AgentHints         agentHints           `json:"agent_hints"`
 	GeneratedAt        string               `json:"generated_at"`
 }
@@ -203,6 +204,10 @@ func runHandoff(args []string, stdout, stderr io.Writer) error {
 	root := probe.GitRoot
 	entrypoints := contextEntrypoints(root)
 	verification, baseCommit := resolveVerification(root, entrypoints)
+	diagnosticResult := diagnoseAgent(canonical, *agent)
+	for _, issue := range diagnosticResult.Diagnostics.Warnings {
+		result.Warnings = append(result.Warnings, handoffIssue{Reason: issue.Reason})
+	}
 	if verification.Status == "UNVERIFIED" {
 		result.Warnings = append(result.Warnings, handoffIssue{Reason: handoffReasonNoVerificationContract})
 	}
@@ -212,7 +217,7 @@ func runHandoff(args []string, stdout, stderr io.Writer) error {
 	if len(probe.EvidenceErrors) > 0 {
 		result.Warnings = append(result.Warnings, handoffIssue{Reason: handoffReasonVerificationUnverified})
 	}
-	document := makeHandoffDocument(project, repository, registered, probe, verification, baseCommit, *task, *agent, entrypoints, guard)
+	document := makeHandoffDocument(project, repository, registered, probe, verification, baseCommit, *task, *agent, entrypoints, guard, diagnosticResult.Diagnostics)
 	result.Handoff = &document
 	result.Status = handoffReady
 	if len(result.Warnings) > 0 {
@@ -316,13 +321,13 @@ func verificationCommands(contents string) []string {
 	return commands
 }
 
-func makeHandoffDocument(project core.ProjectRecord, repository core.RepositoryRecord, registered core.WorkspaceRecord, probe core.WorkspaceProbe, verification verificationContract, baseCommit, task, agent string, entrypoints []string, guard handoffGuard) handoffDocument {
+func makeHandoffDocument(project core.ProjectRecord, repository core.RepositoryRecord, registered core.WorkspaceRecord, probe core.WorkspaceProbe, verification verificationContract, baseCommit, task, agent string, entrypoints []string, guard handoffGuard, diagnostics agentDiagnostics) handoffDocument {
 	return handoffDocument{
 		SchemaVersion: 1, Agent: agent, ProjectID: project.ID, ProjectName: project.DisplayName,
 		RepositoryID: repository.ID, WorkspaceID: registered.ID, WorkspacePath: probe.CanonicalPath,
 		GitRoot: probe.GitRoot, Branch: probe.Branch, Detached: probe.Detached, Head: probe.Head,
 		BaseCommit: baseCommit, RepositoryIdentity: repository.Identity, ContextEntrypoints: entrypoints,
-		AcceptedState: verification.CurrentState, TaskIntent: task, Verification: verification, Guard: guard,
+		AcceptedState: verification.CurrentState, TaskIntent: task, Verification: verification, Guard: guard, AgentDiagnostics: diagnostics,
 		AgentHints:  makeAgentHints(agent, probe.CanonicalPath, entrypoints, verification.RequiredCommands),
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339Nano),
 	}

@@ -29,7 +29,7 @@ func TestHandoffResolvesAliasRunsGuardAndDoesNotMutate(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 		t.Fatalf("handoff JSON was invalid: %v\n%s", err, stdout.String())
 	}
-	if result.Status != handoffReady || result.Handoff == nil {
+	if (result.Status != handoffReady && result.Status != handoffReadyWithIssues) || result.Handoff == nil {
 		t.Fatalf("unexpected handoff result: %#v", result)
 	}
 	if result.Handoff.ProjectID != fixture.project.ID || result.Handoff.RepositoryID != fixture.repositoryRecord.ID || result.Handoff.WorkspaceID != fixture.workspace.ID {
