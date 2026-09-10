@@ -1,13 +1,13 @@
 ---
 contextbridge_state_schema: 1
 basis_branch: main
-basis_commit: b8b5076c06513c0fb19aa99351820de0548b62ff
-basis_date: 2026-09-10T07:48:26Z
+basis_commit: c9d094af14bbbfb50f78abe4c47917f6ecde12ce
+basis_date: 2026-09-10T14:50:46Z
 ---
 
 # Context Bridge Current State
 
-Status: V1.2.0-rc.1 package prepared, locally verified, and pushed; release-candidate audit passed locally; hosted CI blocked externally before steps started
+Status: Knowledge Write-back V1 implemented on top of V1.2.0-rc.1; local verification passed; hosted CI remains externally blocked from the prior release-candidate audit
 
 ## Implemented
 
@@ -23,6 +23,7 @@ Status: V1.2.0-rc.1 package prepared, locally verified, and pushed; release-cand
 - Separate CURRENT-STATE content integrity, basis validity, and basis freshness
 - V1.2.x human summaries with explicit PASS/WARNING/BLOCKED terminal labels, deduplicated warning metadata, clear provenance wording, explicit absent Claude/Cursor configuration diagnostics, and distinct Git target/probe/access failure reasons
 - Shared read-only Git probe classification is used by migration, guard, handoff, doctor, instructions, and discovery paths; it distinguishes genuine non-Git targets from inaccessible or failed Git probes without changing Git configuration
+- Minimal deterministic Knowledge Write-back V1 with `NONE`, `ACTIVE`, `DURABLE_RECORD`, and gated `ACCEPTED_STATE` classes; immutable JSON plan/apply separation, identity and worktree precondition revalidation, secret-like content refusal, canonical Markdown routing, and read-only `knowledge doctor`
 
 ## Verified on Windows
 
@@ -43,13 +44,15 @@ Status: V1.2.0-rc.1 package prepared, locally verified, and pushed; release-cand
 - Packaged binary success-path smoke timing was measured in a trusted temporary fixture: version 20.6 ms median, guard 674.3 ms, handoff 1316.1 ms, doctor --agent codex 2183.7 ms, and instructions --explain --agent codex 1122.7 ms; five runs each, all exit 0
 - RC.1 package metadata reports `contextbridge 1.2.0-rc.1`; release notes are in `docs/releases/v1.2.0-rc.1.md`; no tag or GitHub release was created because hosted CI remains externally blocked
 - Unit and integration tests cover wrong path/Git root/git-dir/common-dir/remote/branch, linked worktrees, independent clones, detached HEAD, local-only unique evidence, and identity change between plan and apply
+- Knowledge Write-back regression coverage proves NONE zero-byte behavior, active and durable routing, deterministic JSON, malformed proposal refusal, secret-like content refusal, identity-change abort, accepted-state downgrade, no automatic Git mutation, and read-only knowledge diagnostics
+- Packaged binary smoke proved registry resolution, NONE plan/apply, ACTIVE plan/apply, canonical active-plan routing, and machine-readable knowledge-doctor warnings in a disposable local fixture
 
 ## GitHub verification
 
 - Repository: `ukyovfx/Context-Bridge`
 - Visibility: private
 - Default branch: `main`
-- Reviewed product basis: `2432e89e8d77f7f79ccba8049a121c0f9ac0e4d8`
+- Reviewed product basis: `c9d094a` (Knowledge Write-back V1 implementation commit; final state metadata follows)
 - Remote `HEAD` and `refs/heads/main` matched the reviewed product basis after push
 
 ## External blocker
