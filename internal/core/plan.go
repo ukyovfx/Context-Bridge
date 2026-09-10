@@ -28,15 +28,28 @@ type Operation struct {
 type Plan struct {
 	target     string
 	operations []Operation
+	guard      *GuardExpected
 }
 
 func NewPlan(target string, operations []Operation) Plan {
 	return Plan{target: target, operations: cloneOperations(operations)}
 }
 
+func NewGuardedPlan(target string, operations []Operation, guard GuardExpected) Plan {
+	copy := guard
+	return Plan{target: target, operations: cloneOperations(operations), guard: &copy}
+}
+
 func (p Plan) Target() string { return p.target }
 
 func (p Plan) Operations() []Operation { return cloneOperations(p.operations) }
+
+func (p Plan) GuardExpected() (GuardExpected, bool) {
+	if p.guard == nil {
+		return GuardExpected{}, false
+	}
+	return *p.guard, true
+}
 
 func cloneOperations(in []Operation) []Operation {
 	out := make([]Operation, len(in))

@@ -32,12 +32,25 @@ func (r CommandRunner) Run(directory, name string, args ...string) error {
 }
 
 type Applier struct {
-	Runner Runner
+	Runner        Runner
+	GuardVerifier GuardVerifier
+}
+
+type GuardVerifier interface {
+	Verify(core.GuardExpected) error
 }
 
 func (a Applier) Apply(plan core.Plan) error {
 	if a.Runner == nil {
 		return errors.New("runner is required")
+	}
+	if expected, guarded := plan.GuardExpected(); guarded {
+		if a.GuardVerifier == nil {
+			return core.WrongWorkspaceError{Reasons: []core.GuardReason{core.ReasonIdentityChangedAfterPlan}}
+		}
+		if err := a.GuardVerifier.Verify(expected); err != nil {
+			return err
+		}
 	}
 	target := plan.Target()
 	exists, err := safety.TargetExists(target)

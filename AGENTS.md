@@ -8,6 +8,8 @@ This repository is exclusively for `ukyovfx/Context-Bridge`.
 
 Read `docs/agent/START-HERE.md` first, then load only the documentation relevant to the task. Treat code, tests, CI, and runtime evidence as technical truth.
 
+Before writing in a registered workspace, run and obey Workspace Guard. Stop on `WRONG_WORKSPACE`; there is no force override.
+
 ## Safety
 
 - Keep the V1 core deterministic and free of model or API calls.

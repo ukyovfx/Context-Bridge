@@ -21,12 +21,17 @@ var windowsReservedNames = map[string]bool{
 }
 
 type InitRequest struct {
-	Name             string
-	Root             string
-	Owner            string
-	Profile          string
-	LocalOnly        bool
-	GeneratorVersion string
+	Name               string
+	Root               string
+	Owner              string
+	Profile            string
+	LocalOnly          bool
+	GeneratorVersion   string
+	ProjectID          string
+	RepositoryID       string
+	RepositoryIdentity *RemoteIdentity
+	PrimaryRemoteName  string
+	CanonicalBranch    string
 }
 
 type InitSnapshot struct {
@@ -39,11 +44,12 @@ type InitSnapshot struct {
 }
 
 type Manifest struct {
-	SchemaVersion int             `json:"schema_version"`
-	Generator     Generator       `json:"generator"`
-	Project       ManifestProject `json:"project"`
-	Lifecycle     Lifecycle       `json:"lifecycle"`
-	Files         []ManifestFile  `json:"files"`
+	SchemaVersion int                 `json:"schema_version"`
+	Generator     Generator           `json:"generator"`
+	Project       ManifestProject     `json:"project"`
+	Repository    *ManifestRepository `json:"repository_identity,omitempty"`
+	Lifecycle     Lifecycle           `json:"lifecycle"`
+	Files         []ManifestFile      `json:"files"`
 }
 
 type Generator struct {
@@ -52,9 +58,17 @@ type Generator struct {
 }
 
 type ManifestProject struct {
+	ID         string `json:"id,omitempty"`
 	Name       string `json:"name"`
-	Repository string `json:"repository"`
+	Repository string `json:"repository,omitempty"`
 	Profile    string `json:"profile"`
+}
+
+type ManifestRepository struct {
+	ID                string         `json:"id"`
+	Identity          RemoteIdentity `json:"identity"`
+	PrimaryRemoteName string         `json:"primary_remote_name"`
+	CanonicalBranch   string         `json:"canonical_branch"`
 }
 
 type Lifecycle struct {
@@ -65,6 +79,7 @@ type Lifecycle struct {
 type ManifestFile struct {
 	Path   string `json:"path"`
 	SHA256 string `json:"sha256"`
+	Kind   string `json:"kind,omitempty"`
 }
 
 func BuildInitPlan(req InitRequest, snapshot InitSnapshot) (Plan, error) {
@@ -114,6 +129,20 @@ func validateInit(req InitRequest, snapshot InitSnapshot) error {
 	if req.Profile != "core" && req.Profile != "openai" {
 		return errors.New("profile must be core or openai")
 	}
+	if err := ValidateID(req.ProjectID, ProjectIDPrefix); err != nil {
+		return fmt.Errorf("safety abort: %w", err)
+	}
+	if err := ValidateID(req.RepositoryID, RepositoryIDPrefix); err != nil {
+		return fmt.Errorf("safety abort: %w", err)
+	}
+	if req.CanonicalBranch == "" {
+		return errors.New("safety abort: canonical branch is required")
+	}
+	if !req.LocalOnly {
+		if req.RepositoryIdentity == nil || req.RepositoryIdentity.Validate() != nil || req.PrimaryRemoteName == "" {
+			return errors.New("safety abort: normalized primary repository identity is required")
+		}
+	}
 	if !req.LocalOnly && req.Owner == "" {
 		return errors.New("safety abort: a verified personal GitHub owner is required")
 	}
@@ -156,19 +185,27 @@ func buildManifest(req InitRequest, files map[string]string) (string, error) {
 		repository = req.Owner + "/" + req.Name
 	}
 	m := Manifest{
-		SchemaVersion: 1,
+		SchemaVersion: 2,
 		Generator:     Generator{Name: "contextbridge", Version: req.GeneratorVersion},
-		Project:       ManifestProject{Name: req.Name, Repository: repository, Profile: req.Profile},
+		Project:       ManifestProject{ID: req.ProjectID, Name: req.Name, Repository: repository, Profile: req.Profile},
 		Lifecycle:     Lifecycle{CreatedByContextBridge: true, LocalOnly: req.LocalOnly},
 	}
+	identity := RemoteIdentity{}
+	if req.RepositoryIdentity != nil {
+		identity = *req.RepositoryIdentity
+	}
+	m.Repository = &ManifestRepository{ID: req.RepositoryID, Identity: identity, PrimaryRemoteName: req.PrimaryRemoteName, CanonicalBranch: req.CanonicalBranch}
 	paths := make([]string, 0, len(files))
 	for path := range files {
 		paths = append(paths, path)
 	}
 	sort.Strings(paths)
 	for _, path := range paths {
+		if path == "docs/agent/CURRENT-STATE.md" {
+			continue
+		}
 		sum := sha256.Sum256([]byte(files[path]))
-		m.Files = append(m.Files, ManifestFile{Path: path, SHA256: hex.EncodeToString(sum[:])})
+		m.Files = append(m.Files, ManifestFile{Path: path, SHA256: hex.EncodeToString(sum[:]), Kind: "generated_template"})
 	}
 	b, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
@@ -178,7 +215,7 @@ func buildManifest(req InitRequest, files map[string]string) (string, error) {
 }
 
 func generatedAgents(name string) string {
-	return fmt.Sprintf("# %s Agent Instructions\n\nRead `docs/agent/START-HERE.md` first. Keep changes scoped to this repository, preserve unrelated work, and treat repository code, tests, CI, and runtime evidence as technical truth.\n\nNever store secrets or tokens in repository files. Stop before destructive Git operations, production writes, permission changes, history rewriting, or unresolved high-impact decisions.\n", name)
+	return fmt.Sprintf("# %s Agent Instructions\n\nRead `docs/agent/START-HERE.md` first. Keep changes scoped to this repository, preserve unrelated work, and treat repository code, tests, CI, and runtime evidence as technical truth.\n\nBefore writing in a registered workspace, run `contextbridge guard --project %s` and stop on `WRONG_WORKSPACE`.\n\nNever store secrets or tokens in repository files. Stop before destructive Git operations, production writes, permission changes, history rewriting, or unresolved high-impact decisions.\n", name, name)
 }
 
 func generatedStartHere(name string) string {
@@ -186,7 +223,7 @@ func generatedStartHere(name string) string {
 }
 
 func generatedCurrentState(name string) string {
-	return fmt.Sprintf("# %s Current State\n\nStatus: initialized\n\n## Verified state\n\n- New local Git repository created by Context Bridge.\n- No implementation milestone has been recorded yet.\n\n## Next action\n\nAdd the first scoped plan under `docs/agent/plans/active/`.\n", name)
+	return fmt.Sprintf("---\ncontextbridge_state_schema: 1\nbasis_branch: main\nbasis_commit: \"\"\nbasis_date: \"\"\n---\n\n# %s Current State\n\nStatus: initialized; basis not yet verified\n\n## Verified state\n\n- New local Git repository created by Context Bridge.\n- No implementation milestone has been recorded yet.\n\n## Next action\n\nRecord accepted state after reviewing a product commit.\n", name)
 }
 
 func generatedChatGPTInstructions(name string) string {
