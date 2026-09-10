@@ -1,7 +1,7 @@
 ---
 contextbridge_state_schema: 1
 basis_branch: main
-basis_commit: 7c74b59b08d670749426b9671e47f22de09bc3d4
+basis_commit: b8b5076c06513c0fb19aa99351820de0548b62ff
 basis_date: 2026-09-10T07:48:26Z
 ---
 
