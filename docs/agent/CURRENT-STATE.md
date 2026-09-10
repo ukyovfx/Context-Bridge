@@ -1,8 +1,8 @@
 ---
 contextbridge_state_schema: 1
 basis_branch: main
-basis_commit: 35c3f75
-basis_date: 2026-09-10T14:59:55Z
+basis_commit: 35c3f754c02ca83af8e59610147b249f74f8c277
+basis_date: 2026-09-10T14:59:35Z
 ---
 
 # Context Bridge Current State
