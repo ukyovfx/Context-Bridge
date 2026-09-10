@@ -7,7 +7,7 @@ basis_date: 2026-09-10T07:48:26Z
 
 # Context Bridge Current State
 
-Status: V1.2 Phase 3 and focused V1.2.x UX/diagnostics polish implemented, locally verified, and pushed; release-candidate audit passed locally; hosted CI blocked externally before steps started
+Status: V1.2.0-rc.1 package prepared, locally verified, and pushed; release-candidate audit passed locally; hosted CI blocked externally before steps started
 
 ## Implemented
 
@@ -41,6 +41,7 @@ Status: V1.2 Phase 3 and focused V1.2.x UX/diagnostics polish implemented, local
 - Migration regression coverage proves adopt of clean/dirty repositories, owned-file conflict, V1-to-V2 upgrade, recoverable backup, repeated no-op, unknown-newer refusal, rebind move, unrelated repository rejection, confirmation, registry-only mutation, and identity-change abort
 - UX/diagnostics regression coverage proves concise human output, warning severity/action mapping, warning deduplication, absent Claude/Cursor configuration reporting, and inaccessible-Git versus non-Git migration probe classification
 - Packaged binary success-path smoke timing was measured in a trusted temporary fixture: version 20.6 ms median, guard 674.3 ms, handoff 1316.1 ms, doctor --agent codex 2183.7 ms, and instructions --explain --agent codex 1122.7 ms; five runs each, all exit 0
+- RC.1 package metadata reports `contextbridge 1.2.0-rc.1`; release notes are in `docs/releases/v1.2.0-rc.1.md`; no tag or GitHub release was created because hosted CI remains externally blocked
 - Unit and integration tests cover wrong path/Git root/git-dir/common-dir/remote/branch, linked worktrees, independent clones, detached HEAD, local-only unique evidence, and identity change between plan and apply
 
 ## GitHub verification

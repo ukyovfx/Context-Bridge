@@ -31,6 +31,18 @@ contextbridge rebind <project> --workspace <path> [--dry-run] [--confirm] [--jso
 contextbridge version
 ```
 
+## Quick start
+
+```powershell
+go install github.com/ukyovfx/Context-Bridge/cmd/contextbridge@v1.2.0-rc.1
+contextbridge version
+contextbridge setup
+contextbridge registry register C:\path\to\existing-repository
+contextbridge handoff MyProject --task "Review the current implementation"
+```
+
+Use `init <project>` instead of `registry register` for a new Context Bridge project. Normal handoff use requires only the project name and task. `PASS` means the verified identity checks succeeded; `WARNING` means the handoff is usable but evidence or observability is incomplete; `BLOCKED` means Context Bridge stopped before producing a runnable handoff and reports the safe next action.
+
 `setup` performs read-only prerequisite and personal GitHub account checks. It never stores credentials or tokens.
 
 `init` refuses existing target paths. It creates and commits the local project before creating a private GitHub repository. The owner must exactly match the authenticated personal GitHub account. `--local-only` stops after the local commit and is intended for tests and intentionally local projects.
