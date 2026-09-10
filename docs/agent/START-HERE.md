@@ -8,7 +8,8 @@ Context Bridge is a deterministic, local-first bridge for carrying development c
 2. `docs/agent/CURRENT-STATE.md`
 3. The relevant active plan under `docs/agent/plans/active/`
 4. `docs/agent/MANIFEST.md` when identity or generated-file provenance is relevant
-5. Relevant code, tests, CI, and repository documentation
+5. `docs/agent/KNOWLEDGE-WRITEBACK.md` when durable knowledge routing is relevant
+6. Relevant code, tests, CI, and repository documentation
 
 ## V1 boundaries
 
@@ -24,3 +25,7 @@ V1.1 adds machine-local registration of existing repositories without modifying 
 - Formatting: `gofmt -l .`
 - Static checks: `go vet ./...`
 - Local E2E: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/e2e-local.ps1`
+
+## Knowledge write-back
+
+Write back only at the meaningful end of work. Use `NONE` when there is no durable change; do not write every task. The agent supplies semantic content, while Context Bridge owns routing, identity, evidence, and refusal. Plan before apply, and expect apply to revalidate. `ACTIVE` records go under `docs/agent/plans/active/`; durable decisions or audits go under the matching `docs/agent/` directory without duplicate copies. `ACCEPTED_STATE` is allowed only when the fresh canonical Guard, repository identity, default branch, HEAD, verification contract, required commands, and current-state provenance all pass. Never commit or push automatically. `knowledge doctor` is read-only.

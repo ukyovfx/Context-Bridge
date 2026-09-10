@@ -25,3 +25,7 @@ Run `go test ./...`, `gofmt`, `go vet ./...`, and `powershell -File scripts/e2e-
 ## Durable state
 
 Update `docs/agent/CURRENT-STATE.md` only when verified durable project state changes.
+
+## Knowledge write-back
+
+At the meaningful end of a task, the agent may propose one write-back class: `NONE`, `ACTIVE`, `DURABLE_RECORD`, or `ACCEPTED_STATE`. Use `NONE` when no durable project knowledge changed; do not write a record for every task. The agent supplies only the semantic summary, status, blocker, or next action. Context Bridge owns project routing, identity, evidence, and refusal decisions. Use `contextbridge writeback plan` before `writeback apply`; apply revalidates the workspace and never commits or pushes. `ACCEPTED_STATE` requires fresh canonical identity, a passing Guard, unchanged repository identity, a known default-branch HEAD, resolved verification instructions, passing required commands, and no contradictions. If those conditions are not met, remain `ACTIVE` or refuse. `knowledge doctor` is read-only.

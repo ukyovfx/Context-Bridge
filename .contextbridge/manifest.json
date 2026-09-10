@@ -36,17 +36,17 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "585bb060bc7f0acd9fabe4a773c66d9438d3b41f29f0990dddf82a9a2bc948c7",
+      "sha256": "7af77c7fa0a1abb4377e61a3f5d55d2a776472caa058ab88fcb247608a6bd93a",
       "kind": "generated_template"
     },
     {
       "path": "CHATGPT-PROJECT-INSTRUCTIONS.md",
-      "sha256": "eba2b635c01b5b341f73359767f6bfece62e64a9abc9c467ca0645181f5b9173",
+      "sha256": "cd2868e3dc54201136a2e3eb72409b7307357eef686152b6f4892a7954ada411",
       "kind": "generated_template"
     },
     {
       "path": "docs/agent/START-HERE.md",
-      "sha256": "54bb870becf0e7f1f3507d1cfab511e2da9492744aed91b019d9831cb99dda9f",
+      "sha256": "7d6c73e56ecc940438622916934b2eb043adf40d61ad39386a63940ef440ac99",
       "kind": "generated_template"
     },
     {

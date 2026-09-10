@@ -28,6 +28,9 @@ contextbridge instructions --explain [--project PATH] [--agent codex|claude|curs
 contextbridge adopt <path> [--dry-run] [--confirm] [--json]
 contextbridge upgrade <path> [--dry-run] [--confirm] [--json]
 contextbridge rebind <project> --workspace <path> [--dry-run] [--confirm] [--json]
+contextbridge writeback plan <project> --class none|active|durable_record|accepted_state --summary "..." [--json]
+contextbridge writeback apply --proposal PATH [--json]
+contextbridge knowledge doctor --project PATH [--json]
 contextbridge version
 ```
 
@@ -71,6 +74,8 @@ JSON discovery always includes the requested root, terminal status, candidate an
 `instructions --explain` inspects effective instruction sources and safely observable agent environment metadata for Codex, Claude Code, or Cursor. It reports ordered source paths, sizes, SHA-256 hashes, repository containment, basis-change evidence where available, configuration scope, and readiness warnings without copying instruction contents or changing agent configuration. `doctor --agent` adds the same read-only diagnostics to the existing project doctor flow.
 
 `adopt` explicitly adds a Context Bridge Manifest V2 to an existing branch-attached Git repository without changing Git history or the registry. `upgrade` explicitly migrates a Context Bridge Manifest V1 to V2, preserving the old manifest as `.contextbridge/manifest.json.v1.bak`. `rebind` explicitly updates only the machine-local canonical workspace record after a legitimate move. All three commands print a plan, require `--confirm` for mutation, re-probe immediately before mutation, and reject identity conflicts. `--dry-run` never prompts and never mutates.
+
+`writeback plan` and `writeback apply` provide the minimal explicit knowledge write-back flow. Use `NONE` when no durable knowledge changed; use `ACTIVE` for unfinished work, `DURABLE_RECORD` for one decision or audit, and `ACCEPTED_STATE` only when its full evidence gate passes. The flow is local-only, never commits or pushes, and does not write AI-Knowledge. `knowledge doctor` is a read-only Markdown metadata and provenance check. See `docs/agent/KNOWLEDGE-WRITEBACK.md`.
 
 ## Identity model
 

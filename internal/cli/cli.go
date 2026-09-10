@@ -37,6 +37,14 @@ func Run(args []string, stdout, stderr io.Writer, version string) int {
 		err = runUpgrade(args[1:], stdout, stderr, version)
 	case "rebind":
 		err = runRebind(args[1:], stdout, stderr)
+	case "writeback":
+		err = runWriteback(args[1:], stdout, stderr, version)
+	case "knowledge":
+		if len(args) < 2 || args[1] != "doctor" {
+			err = errors.New("knowledge requires doctor")
+		} else {
+			err = runKnowledgeDoctor(args[2:], stdout, stderr)
+		}
 	case "version":
 		if len(args) != 1 {
 			err = errors.New("version accepts no arguments")
@@ -73,5 +81,8 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, "  contextbridge adopt <path> [--dry-run] [--confirm] [--json]")
 	fmt.Fprintln(w, "  contextbridge upgrade <path> [--dry-run] [--confirm] [--json]")
 	fmt.Fprintln(w, "  contextbridge rebind <project> --workspace <path> [--dry-run] [--confirm] [--json]")
+	fmt.Fprintln(w, "  contextbridge writeback plan <project> [--class none|active|durable_record|accepted_state] [--summary TEXT] [--json]")
+	fmt.Fprintln(w, "  contextbridge writeback apply --proposal PATH [--json]")
+	fmt.Fprintln(w, "  contextbridge knowledge doctor [--project PATH] [--json]")
 	fmt.Fprintln(w, "  contextbridge version")
 }
