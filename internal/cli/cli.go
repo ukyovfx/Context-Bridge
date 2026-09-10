@@ -27,6 +27,8 @@ func Run(args []string, stdout, stderr io.Writer, version string) int {
 		err = runGuard(args[1:], stdout, stderr)
 	case "discover":
 		err = runDiscover(args[1:], stdout, stderr)
+	case "handoff":
+		err = runHandoff(args[1:], stdout, stderr)
 	case "version":
 		if len(args) != 1 {
 			err = errors.New("version accepts no arguments")
@@ -58,5 +60,6 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, "  contextbridge registry register <path> [--role canonical|alternate] [--dry-run]")
 	fmt.Fprintln(w, "  contextbridge guard --project <id-or-alias> [--workspace <id-or-path>]")
 	fmt.Fprintln(w, "  contextbridge discover --root <path> [--json]")
+	fmt.Fprintln(w, "  contextbridge handoff <project> --task \"<intent>\" [--agent codex|claude|cursor] [--json]")
 	fmt.Fprintln(w, "  contextbridge version")
 }

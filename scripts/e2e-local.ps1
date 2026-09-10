@@ -67,6 +67,13 @@ try {
     & $binary guard --project existing-repository --workspace $existingRepository | Out-Host
     if ($LASTEXITCODE -ne 0) { throw 'guard rejected registered repository' }
 
+    $handoff = & $binary handoff existing-repository --task 'e2e handoff' --agent codex --json
+    if ($LASTEXITCODE -ne 0) { throw 'handoff failed' }
+    $handoffResult = $handoff | ConvertFrom-Json
+    if ($handoffResult.status -notin @('ready', 'ready_with_warnings')) { throw 'handoff omitted a ready terminal status' }
+    if (-not $handoffResult.handoff.guard.allowed) { throw 'handoff guard did not pass' }
+    if ($handoffResult.handoff.task_intent -ne 'e2e handoff') { throw 'handoff task intent mismatch' }
+
     $registryBeforeDiscovery = (Get-FileHash -LiteralPath (Join-Path $registryHome 'registry-v1.json') -Algorithm SHA256).Hash
     $discovery = & $binary discover --root $testRoot --json
     if ($LASTEXITCODE -ne 0) { throw 'discovery failed' }

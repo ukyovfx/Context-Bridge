@@ -23,6 +23,7 @@ contextbridge registry show <project>
 contextbridge registry register <path> [--role canonical|alternate] [--dry-run]
 contextbridge guard --project <id-or-alias> [--workspace <id-or-path>]
 contextbridge discover --root <path> [--json]
+contextbridge handoff <project> --task "<intent>" [--agent codex|claude|cursor] [--json]
 contextbridge version
 ```
 
@@ -46,6 +47,8 @@ Configuration is supplied by flags or environment variables:
 JSON discovery always includes the requested root, terminal status, candidate and skipped counts, traversal-limit state, warnings, and errors. Human output always ends with the same terminal summary. Stable scan reasons include `ACCESS_DENIED`, `REPARSE_POINT_SKIPPED`, `MAX_DEPTH_REACHED`, `ENTRY_LIMIT_REACHED`, `PROBE_FAILED`, `ROOT_NOT_FOUND`, and `TIME_LIMIT_REACHED`.
 
 `doctor` validates Manifest V1 or V2 generated-file provenance and reports `CURRENT-STATE` content integrity, basis validity, and basis freshness separately. A metadata-only state commit may remain fresh; later product changes make the recorded basis stale.
+
+`handoff` resolves a registered project by exact ID, display name, or alias, selects its registered canonical workspace, re-probes it, and runs the Workspace Guard before emitting a deterministic, read-only handoff. The handoff contains portable project/repository identity, canonical workspace facts, context entrypoint references, task intent, derived verification requirements, accepted-state evidence, and thin adapter hints for Codex, Claude, or Cursor. It never persists a Task or AgentSession, starts an agent, changes the registry, or changes the workspace. Guard failure is a hard `WRONG_WORKSPACE` stop with no runnable handoff. If durable verification instructions are absent, the handoff reports `UNVERIFIED` and `NO_VERIFICATION_CONTRACT` rather than inventing commands.
 
 ## Identity model
 
