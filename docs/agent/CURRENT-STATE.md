@@ -53,7 +53,7 @@ Status: Knowledge Write-back V1 implemented on top of V1.2.0-rc.1; local verific
 - Visibility: private
 - Default branch: `main`
 - Reviewed product basis: `c9d094a` (Knowledge Write-back V1 implementation commit; final state metadata follows)
-- Remote `HEAD` and `refs/heads/main` matched the reviewed product basis after push
+- Remote repository is private; default branch is `main`; remote consistency is verified after each authorized push
 
 ## External blocker
 
