@@ -1,8 +1,8 @@
 ---
 contextbridge_state_schema: 1
 basis_branch: main
-basis_commit: 77e1142dd35e5de6b881ec6c36b45fcba0a4c2bc
-basis_date: 2026-09-10T02:03:31Z
+basis_commit: e9bfb257a2c66ed5cf9819a8003d058fb121c89b
+basis_date: 2026-09-10T06:36:44Z
 ---
 
 # Context Bridge Current State
@@ -14,7 +14,7 @@ Status: V1.1 implemented, locally verified, and pushed; hosted CI blocked extern
 - Portable Project and Repository identity plus machine-local Workspace identity
 - Versioned JSON registry with full-document validation, exclusive writer lock, safe replacement, and last-known-valid backup
 - Vendor-neutral HTTPS, SCP-style SSH, and `ssh://` remote normalization
-- Shared read-only Git workspace probe, deterministic Workspace Guard, and bounded output-only discovery
+- Shared read-only Git workspace probe, deterministic Workspace Guard, and bounded output-only discovery with explicit terminal reporting
 - `registry list`, `registry show`, `registry register`, `guard`, and `discover` commands
 - Manifest V2 generated-template provenance with Manifest V1 read compatibility
 - Separate CURRENT-STATE content integrity, basis validity, and basis freshness
@@ -26,6 +26,8 @@ Status: V1.1 implemented, locally verified, and pushed; hosted CI blocked extern
 - `go vet ./...`: passed
 - `scripts/e2e-local.ps1`: passed
 - E2E proved init and registration dry-runs, existing-repository registration, discovery, and guard behavior without unintended repository or registry mutation
+- Discovery anomaly regression coverage proves empty, partial, bounded, access-limited, reparse-skipped, warning, and JSON terminal states
+- Actual read-only scans: `C:\Users\mynti\Documents` returned `partial` with 2 candidates, 1 skipped directory, and `PROBE_EVIDENCE_INCOMPLETE`/`MAX_DEPTH_REACHED`; `C:\AI-Workspace` returned `success` with 3 candidates
 - Unit and integration tests cover wrong path/Git root/git-dir/common-dir/remote/branch, linked worktrees, independent clones, detached HEAD, local-only unique evidence, and identity change between plan and apply
 
 ## GitHub verification
@@ -33,7 +35,7 @@ Status: V1.1 implemented, locally verified, and pushed; hosted CI blocked extern
 - Repository: `ukyovfx/Context-Bridge`
 - Visibility: private
 - Default branch: `main`
-- Reviewed product basis: `77e1142dd35e5de6b881ec6c36b45fcba0a4c2bc`
+- Reviewed product basis: `e9bfb257a2c66ed5cf9819a8003d058fb121c89b`
 - Remote `HEAD` and `refs/heads/main` matched the reviewed product basis after push
 
 ## External blocker
