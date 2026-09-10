@@ -106,6 +106,47 @@ func TestInstructionsClaudeAndCursorDiagnostics(t *testing.T) {
 	}
 }
 
+func TestInstructionsReportsAbsentClaudeAndCursorConfiguration(t *testing.T) {
+	fixture := newHandoffFixture(t)
+	claudeConfig := filepath.Join(t.TempDir(), "missing-claude")
+	t.Setenv("CONTEXTBRIDGE_HOME", fixture.registryHome)
+	t.Setenv("CLAUDE_CONFIG_DIR", claudeConfig)
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"instructions", "--explain", "--project", fixture.repository, "--agent", "claude"}, &stdout, &stderr, "test"); code != 0 {
+		t.Fatalf("claude diagnostics failed: %s", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Claude instructions: none detected") || !strings.Contains(stdout.String(), "Claude local config: not detected") {
+		t.Fatalf("absent Claude configuration was not explicit: %s", stdout.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"instructions", "--explain", "--project", fixture.repository, "--agent", "cursor"}, &stdout, &stderr, "test"); code != 0 {
+		t.Fatalf("cursor diagnostics failed: %s", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Cursor rules: none detected") || !strings.Contains(stdout.String(), "Cursor worktree config: not detected") {
+		t.Fatalf("absent Cursor configuration was not explicit: %s", stdout.String())
+	}
+}
+
+func TestDiagnosticWarningsCarrySeverityAndAction(t *testing.T) {
+	issue := warningFor("GLOBAL_INSTRUCTION_PRESENT")
+	if issue.Severity != "info" || issue.Message == "" || issue.Action == "" {
+		t.Fatalf("warning metadata incomplete: %#v", issue)
+	}
+	issue = warningFor("AGENT_CONFIG_UNVERIFIED")
+	if issue.Severity != "warning" || issue.Message == "" || issue.Action == "" {
+		t.Fatalf("configuration warning metadata incomplete: %#v", issue)
+	}
+}
+
+func TestDiagnosticWarningsAreDeduplicated(t *testing.T) {
+	diagnostics := agentDiagnostics{InstructionChain: []instructionSource{{Scope: "global"}, {Scope: "global"}}, Warnings: []diagnosticIssue{}}
+	deriveDiagnosticWarnings(&diagnostics)
+	if len(diagnostics.Warnings) != 1 || diagnostics.Warnings[0].Reason != "GLOBAL_INSTRUCTION_PRESENT" {
+		t.Fatalf("duplicate warning was emitted: %#v", diagnostics.Warnings)
+	}
+}
+
 func TestInstructionsRejectsUnknownAgent(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	if code := Run([]string{"instructions", "--explain", "--agent", "unknown"}, &stdout, &stderr, "test"); code == 0 || !strings.Contains(stderr.String(), "agent must be codex") {

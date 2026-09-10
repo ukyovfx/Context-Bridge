@@ -50,10 +50,10 @@ func runGuard(args []string, stdout, stderr io.Writer) error {
 	expected := guardExpected(project, repository, registered, "")
 	decision := core.EvaluateGuard(expected, core.GuardActual{ProjectFound: true, ProjectID: project.ID, RepositoryID: repository.ID, WorkspaceID: registered.ID, Probe: probe})
 	if !decision.Allowed {
-		fmt.Fprintf(stderr, "%s: %v\n", decision.PublicCode, decision.Reasons)
+		fmt.Fprintf(stderr, "Guard: BLOCKED\nReason: %s\nDetails: %v\nAction: use the registered canonical workspace and resolve the reported identity mismatch.\n", decision.PublicCode, decision.Reasons)
 		return core.WrongWorkspaceError{Reasons: decision.Reasons}
 	}
-	fmt.Fprintf(stdout, "guard ok: project=%s repository=%s workspace=%s\n", project.ID, repository.ID, registered.ID)
+	fmt.Fprintf(stdout, "Project: %s\nWorkspace: %s\nGuard: PASS\n", project.DisplayName, registered.Path)
 	return nil
 }
 
@@ -94,7 +94,7 @@ func guardExpected(project core.ProjectRecord, repository core.RepositoryRecord,
 }
 
 func failGuard(stderr io.Writer, reason core.GuardReason) error {
-	fmt.Fprintf(stderr, "%s: [%s]\n", core.WrongWorkspace, reason)
+	fmt.Fprintf(stderr, "Guard: BLOCKED\nReason: %s\nAction: resolve the project or workspace selection and retry.\n", reason)
 	return core.WrongWorkspaceError{Reasons: []core.GuardReason{reason}}
 }
 

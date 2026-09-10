@@ -40,7 +40,10 @@ type instructionSource struct {
 }
 
 type diagnosticIssue struct {
-	Reason string `json:"reason"`
+	Reason   string `json:"reason"`
+	Severity string `json:"severity"`
+	Message  string `json:"message"`
+	Action   string `json:"action,omitempty"`
 }
 
 type readinessSummary struct {
@@ -70,20 +73,24 @@ type codexDiagnostics struct {
 }
 
 type claudeDiagnostics struct {
-	ClaudeConfigDir      string   `json:"claude_config_dir,omitempty"`
-	CLAUDELocalPresent   bool     `json:"claude_local_present"`
-	AGENTSImportPresent  bool     `json:"agents_import_present"`
-	RulesPaths           []string `json:"rules_paths,omitempty"`
-	GlobalInstructions   []string `json:"global_instructions,omitempty"`
-	ManagedPolicyPresent bool     `json:"managed_policy_present"`
-	AutoMemoryPresent    bool     `json:"auto_memory_present"`
+	ClaudeConfigDir            string   `json:"claude_config_dir,omitempty"`
+	CLAUDELocalPresent         bool     `json:"claude_local_present"`
+	AGENTSImportPresent        bool     `json:"agents_import_present"`
+	RulesPaths                 []string `json:"rules_paths,omitempty"`
+	GlobalInstructions         []string `json:"global_instructions,omitempty"`
+	ManagedPolicyPresent       bool     `json:"managed_policy_present"`
+	AutoMemoryPresent          bool     `json:"auto_memory_present"`
+	InstructionSourcesDetected bool     `json:"instruction_sources_detected"`
+	LocalConfigDetected        bool     `json:"local_config_detected"`
 }
 
 type cursorDiagnostics struct {
-	RulePaths                  []string `json:"rule_paths,omitempty"`
-	WorktreeConfigurationPaths []string `json:"worktree_configuration_paths,omitempty"`
-	ExternalWorktreeLocation   string   `json:"external_worktree_location,omitempty"`
-	InsideExternalWorktree     bool     `json:"inside_external_worktree"`
+	RulePaths                     []string `json:"rule_paths,omitempty"`
+	WorktreeConfigurationPaths    []string `json:"worktree_configuration_paths,omitempty"`
+	ExternalWorktreeLocation      string   `json:"external_worktree_location,omitempty"`
+	InsideExternalWorktree        bool     `json:"inside_external_worktree"`
+	RulesDetected                 bool     `json:"rules_detected"`
+	WorktreeConfigurationDetected bool     `json:"worktree_configuration_detected"`
 }
 
 type agentDiagnostics struct {
@@ -402,7 +409,8 @@ func diagnoseEnvironment(root, cwd, agent string, sources []instructionSource, c
 			memoryPath = filepath.Join(config, "projects", strings.ReplaceAll(workspace.PathKey(root), "/", "-"), "memory")
 		}
 		_, memoryErr := os.Stat(memoryPath)
-		return nil, &claudeDiagnostics{ClaudeConfigDir: config, CLAUDELocalPresent: local, AGENTSImportPresent: imports, RulesPaths: rules, GlobalInstructions: global, ManagedPolicyPresent: managed, AutoMemoryPresent: memoryErr == nil}, nil
+		_, configErr := os.Stat(config)
+		return nil, &claudeDiagnostics{ClaudeConfigDir: config, CLAUDELocalPresent: local, AGENTSImportPresent: imports, RulesPaths: rules, GlobalInstructions: global, ManagedPolicyPresent: managed, AutoMemoryPresent: memoryErr == nil, InstructionSourcesDetected: len(sources) > 0, LocalConfigDetected: configErr == nil}, nil
 	}
 	rules := make([]string, 0)
 	for _, source := range sources {
@@ -417,7 +425,7 @@ func diagnoseEnvironment(root, cwd, agent string, sources []instructionSource, c
 	home, _ := os.UserHomeDir()
 	external := filepath.Join(home, ".cursor", "worktrees")
 	inside := isWithin(cwd, external)
-	return nil, nil, &cursorDiagnostics{RulePaths: rules, WorktreeConfigurationPaths: worktreePaths, ExternalWorktreeLocation: external, InsideExternalWorktree: inside}
+	return nil, nil, &cursorDiagnostics{RulePaths: rules, WorktreeConfigurationPaths: worktreePaths, ExternalWorktreeLocation: external, InsideExternalWorktree: inside, RulesDetected: len(rules) > 0, WorktreeConfigurationDetected: len(worktreePaths) > 0}
 }
 
 type codexConfig struct {
@@ -486,24 +494,63 @@ func truncationRisk(bytes, limit int) string {
 func deriveDiagnosticWarnings(diagnostics *agentDiagnostics) {
 	for _, source := range diagnostics.InstructionChain {
 		if strings.Contains(strings.ToLower(filepath.Base(source.Path)), ".override.") {
-			diagnostics.Warnings = append(diagnostics.Warnings, diagnosticIssue{Reason: "INSTRUCTION_OVERRIDE_PRESENT"})
+			appendDiagnosticWarning(diagnostics, "INSTRUCTION_OVERRIDE_PRESENT")
 		}
 		if source.Scope == "global" {
-			diagnostics.Warnings = append(diagnostics.Warnings, diagnosticIssue{Reason: "GLOBAL_INSTRUCTION_PRESENT"})
+			appendDiagnosticWarning(diagnostics, "GLOBAL_INSTRUCTION_PRESENT")
 		}
 	}
 	if diagnostics.Codex != nil && diagnostics.Codex.PredictedTruncationRisk != "LOW" && diagnostics.Codex.PredictedTruncationRisk != "UNKNOWN" {
-		diagnostics.Warnings = append(diagnostics.Warnings, diagnosticIssue{Reason: "INSTRUCTION_TRUNCATION_RISK"})
+		appendDiagnosticWarning(diagnostics, "INSTRUCTION_TRUNCATION_RISK")
 	}
 	if diagnostics.WorkspaceGuard == readinessWarning {
-		diagnostics.Warnings = append(diagnostics.Warnings, diagnosticIssue{Reason: "AGENT_ROOT_MISMATCH"})
+		appendDiagnosticWarning(diagnostics, "AGENT_ROOT_MISMATCH")
 	}
 	if diagnostics.Codex != nil && diagnostics.Codex.WritableRootsKnown && len(diagnostics.Codex.WritableRoots) == 0 {
-		diagnostics.Warnings = append(diagnostics.Warnings, diagnosticIssue{Reason: "AGENT_WRITABLE_ROOT_MISMATCH"})
+		appendDiagnosticWarning(diagnostics, "AGENT_WRITABLE_ROOT_MISMATCH")
 	}
 	if diagnostics.Codex != nil && (!diagnostics.Codex.ConfigurationObservable || !diagnostics.Codex.WritableRootsKnown) {
-		diagnostics.Warnings = append(diagnostics.Warnings, diagnosticIssue{Reason: "AGENT_CONFIG_UNVERIFIED"})
+		appendDiagnosticWarning(diagnostics, "AGENT_CONFIG_UNVERIFIED")
 	}
+}
+
+func appendDiagnosticWarning(diagnostics *agentDiagnostics, reason string) {
+	for _, issue := range diagnostics.Warnings {
+		if issue.Reason == reason {
+			return
+		}
+	}
+	diagnostics.Warnings = append(diagnostics.Warnings, warningFor(reason))
+}
+
+func warningFor(reason string) diagnosticIssue {
+	issue := diagnosticIssue{Reason: reason, Severity: "info", Message: reason}
+	switch reason {
+	case "GLOBAL_INSTRUCTION_PRESENT":
+		issue.Message = "A user-level instruction file is outside this repository."
+		issue.Action = "none required unless behavior differs from expectations."
+	case "AGENT_CONFIG_UNVERIFIED":
+		issue.Severity = "warning"
+		issue.Message = "Agent sandbox or write-scope configuration could not be fully observed."
+		issue.Action = "review agent configuration if strict enforcement is required."
+	case "INSTRUCTION_OVERRIDE_PRESENT":
+		issue.Severity = "warning"
+		issue.Message = "An instruction override file may change the effective rules."
+		issue.Action = "review the override when reproducibility matters."
+	case "INSTRUCTION_TRUNCATION_RISK":
+		issue.Severity = "warning"
+		issue.Message = "The effective instruction chain is near or above the agent limit."
+		issue.Action = "reduce instruction size if context may be truncated."
+	case "AGENT_ROOT_MISMATCH":
+		issue.Severity = "warning"
+		issue.Message = "The agent workspace root does not match the registered workspace."
+		issue.Action = "stop and resolve the workspace before writing."
+	case "AGENT_WRITABLE_ROOT_MISMATCH":
+		issue.Severity = "warning"
+		issue.Message = "The observed writable scope does not include a verified workspace."
+		issue.Action = "review agent write scope before allowing mutations."
+	}
+	return issue
 }
 
 func makeReadiness(diagnostics *agentDiagnostics) readinessSummary {
@@ -595,9 +642,28 @@ func emitInstructionResult(writer io.Writer, result instructionResult, jsonOutpu
 	fmt.Fprintf(writer, "Agent: %s\nEffective cwd: %s\nProject root: %s\n", d.Agent, d.EffectiveCWD, d.ProjectRoot)
 	fmt.Fprintf(writer, "Workspace Guard: %s\nInstruction chain: %s\nOverride files: %s\nInstruction size: %s\nSandbox scope: %s\nGit environment: %s\nOverall: %s\n", d.Readiness.WorkspaceGuard, d.Readiness.InstructionChain, d.Readiness.OverrideFiles, d.Readiness.InstructionSize, d.Readiness.SandboxScope, d.Readiness.GitEnvironment, d.Readiness.Overall)
 	for _, issue := range d.Warnings {
-		fmt.Fprintf(writer, "warning reason=%s\n", issue.Reason)
+		fmt.Fprintf(writer, "%s %s\n", strings.ToUpper(issue.Severity), issue.Reason)
+		fmt.Fprintf(writer, "  %s\n", issue.Message)
+		if issue.Action != "" {
+			fmt.Fprintf(writer, "  Action: %s\n", issue.Action)
+		}
 	}
 	for _, issue := range d.Errors {
 		fmt.Fprintf(writer, "error reason=%s\n", issue.Reason)
 	}
+	if d.Agent == "claude" && d.Claude != nil && !d.Claude.InstructionSourcesDetected {
+		fmt.Fprintln(writer, "Claude instructions: none detected")
+		fmt.Fprintf(writer, "Claude local config: %s\n", detectedLabel(d.Claude.LocalConfigDetected))
+	}
+	if d.Agent == "cursor" && d.Cursor != nil && !d.Cursor.RulesDetected {
+		fmt.Fprintln(writer, "Cursor rules: none detected")
+		fmt.Fprintf(writer, "Cursor worktree config: %s\n", detectedLabel(d.Cursor.WorktreeConfigurationDetected))
+	}
+}
+
+func detectedLabel(found bool) string {
+	if found {
+		return "detected"
+	}
+	return "not detected"
 }

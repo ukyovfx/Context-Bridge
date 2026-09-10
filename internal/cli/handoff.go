@@ -38,7 +38,10 @@ const (
 )
 
 type handoffIssue struct {
-	Reason string `json:"reason"`
+	Reason   string `json:"reason"`
+	Severity string `json:"severity,omitempty"`
+	Message  string `json:"message,omitempty"`
+	Action   string `json:"action,omitempty"`
 }
 
 type handoffGuard struct {
@@ -206,16 +209,16 @@ func runHandoff(args []string, stdout, stderr io.Writer) error {
 	verification, baseCommit := resolveVerification(root, entrypoints)
 	diagnosticResult := diagnoseAgent(canonical, *agent)
 	for _, issue := range diagnosticResult.Diagnostics.Warnings {
-		result.Warnings = append(result.Warnings, handoffIssue{Reason: issue.Reason})
+		result.Warnings = append(result.Warnings, handoffIssue{Reason: issue.Reason, Severity: issue.Severity, Message: issue.Message, Action: issue.Action})
 	}
 	if verification.Status == "UNVERIFIED" {
-		result.Warnings = append(result.Warnings, handoffIssue{Reason: handoffReasonNoVerificationContract})
+		result.Warnings = append(result.Warnings, handoffIssue{Reason: handoffReasonNoVerificationContract, Severity: "warning", Message: "No verification commands were resolved from repository instructions.", Action: "review the repository verification route before proceeding."})
 	}
 	if verification.CurrentState.BasisFreshness == "stale" || verification.CurrentState.ContentIntegrity == "modified" {
-		result.Warnings = append(result.Warnings, handoffIssue{Reason: handoffReasonStateStale})
+		result.Warnings = append(result.Warnings, handoffIssue{Reason: handoffReasonStateStale, Severity: "warning", Message: "Accepted-state evidence is stale or changed.", Action: "review CURRENT-STATE and repository changes before proceeding."})
 	}
 	if len(probe.EvidenceErrors) > 0 {
-		result.Warnings = append(result.Warnings, handoffIssue{Reason: handoffReasonVerificationUnverified})
+		result.Warnings = append(result.Warnings, handoffIssue{Reason: handoffReasonVerificationUnverified, Severity: "warning", Message: "Some Git evidence could not be verified.", Action: "review the probe evidence before relying on this handoff."})
 	}
 	document := makeHandoffDocument(project, repository, registered, probe, verification, baseCommit, *task, *agent, entrypoints, guard, diagnosticResult.Diagnostics)
 	result.Handoff = &document
@@ -357,14 +360,48 @@ func emitHandoffResult(stdout io.Writer, result handoffResult, jsonOutput bool) 
 		return
 	}
 	if result.Handoff != nil {
-		fmt.Fprintf(stdout, "handoff status=%s project=%s repository=%s workspace=%s agent=%s\n", result.Status, result.Handoff.ProjectID, result.Handoff.RepositoryID, result.Handoff.WorkspaceID, result.Handoff.Agent)
-		fmt.Fprintf(stdout, "workspace=%s branch=%s head=%s\n", result.Handoff.WorkspacePath, result.Handoff.Branch, result.Handoff.Head)
+		fmt.Fprintf(stdout, "Project: %s\nWorkspace: verified\nGuard: %s\nAgent: %s\nVerification: %s\n", result.Handoff.ProjectName, passLabel(result.Handoff.Guard.Allowed), result.Handoff.Agent, result.Handoff.Verification.Status)
+		fmt.Fprintf(stdout, "Accepted state: %s\n", acceptedStateLabel(result.Handoff.AcceptedState))
+		fmt.Fprintf(stdout, "Warnings: %d\n", len(result.Warnings))
 	}
 	for _, warning := range result.Warnings {
-		fmt.Fprintf(stdout, "warning reason=%s\n", warning.Reason)
+		fmt.Fprintf(stdout, "%s %s\n", strings.ToUpper(defaultSeverity(warning.Severity)), warning.Reason)
+		if warning.Message != "" {
+			fmt.Fprintf(stdout, "  %s\n", warning.Message)
+		}
+		if warning.Action != "" {
+			fmt.Fprintf(stdout, "  Action: %s\n", warning.Action)
+		}
 	}
 	for _, failure := range result.Errors {
 		fmt.Fprintf(stdout, "error reason=%s\n", failure.Reason)
 	}
-	fmt.Fprintf(stdout, "handoff terminal_status=%s project=%s\n", result.Status, result.Project)
+	fmt.Fprintf(stdout, "\n%s\n", strings.ToUpper(string(result.Status)))
+}
+
+func passLabel(allowed bool) string {
+	if allowed {
+		return "PASS"
+	}
+	return "BLOCKED"
+}
+
+func defaultSeverity(value string) string {
+	if value == "" {
+		return "warning"
+	}
+	return value
+}
+
+func acceptedStateLabel(report state.Report) string {
+	if report.ContentIntegrity == "unverified" && report.BasisValidity == "unverified" && report.BasisFreshness == "unverified" {
+		return "UNVERIFIED (CURRENT-STATE provenance missing or invalid)"
+	}
+	if report.BasisFreshness == "stale" {
+		return "STALE"
+	}
+	if report.ContentIntegrity == "ok" && report.BasisValidity == "valid" && report.BasisFreshness == "fresh" {
+		return "VERIFIED"
+	}
+	return "UNVERIFIED"
 }

@@ -19,20 +19,23 @@ import (
 )
 
 const (
-	reasonProjectNotFound          = "PROJECT_NOT_FOUND"
-	reasonProjectAmbiguous         = "PROJECT_AMBIGUOUS"
-	reasonWorkspaceNotFound        = "WORKSPACE_NOT_FOUND"
-	reasonWorkspaceAlreadyBound    = "WORKSPACE_ALREADY_BOUND"
-	reasonRepositoryMismatch       = "REPOSITORY_MISMATCH"
-	reasonTargetNotGit             = "TARGET_NOT_GIT"
-	reasonManifestConflict         = "MANIFEST_CONFLICT"
-	reasonAlreadyAdopted           = "ALREADY_ADOPTED"
-	reasonAlreadyUpgraded          = "ALREADY_UPGRADED"
-	reasonRebindAmbiguous          = "REBIND_AMBIGUOUS"
-	reasonRebindIdentityMismatch   = "REBIND_IDENTITY_MISMATCH"
-	reasonIdentityChangedAfterPlan = "IDENTITY_CHANGED_AFTER_PLAN"
-	reasonConfirmationRequired     = "CONFIRMATION_REQUIRED"
-	reasonUnknownNewerManifest     = "UNKNOWN_NEWER_MANIFEST"
+	reasonProjectNotFound           = "PROJECT_NOT_FOUND"
+	reasonProjectAmbiguous          = "PROJECT_AMBIGUOUS"
+	reasonWorkspaceNotFound         = "WORKSPACE_NOT_FOUND"
+	reasonWorkspaceAlreadyBound     = "WORKSPACE_ALREADY_BOUND"
+	reasonRepositoryMismatch        = "REPOSITORY_MISMATCH"
+	reasonTargetNotGit              = "TARGET_NOT_GIT"
+	reasonTargetNotFound            = "TARGET_NOT_FOUND"
+	reasonGitRepositoryInaccessible = "GIT_REPOSITORY_INACCESSIBLE"
+	reasonGitProbeFailed            = "GIT_PROBE_FAILED"
+	reasonManifestConflict          = "MANIFEST_CONFLICT"
+	reasonAlreadyAdopted            = "ALREADY_ADOPTED"
+	reasonAlreadyUpgraded           = "ALREADY_UPGRADED"
+	reasonRebindAmbiguous           = "REBIND_AMBIGUOUS"
+	reasonRebindIdentityMismatch    = "REBIND_IDENTITY_MISMATCH"
+	reasonIdentityChangedAfterPlan  = "IDENTITY_CHANGED_AFTER_PLAN"
+	reasonConfirmationRequired      = "CONFIRMATION_REQUIRED"
+	reasonUnknownNewerManifest      = "UNKNOWN_NEWER_MANIFEST"
 )
 
 type migrationOperation struct {
@@ -435,12 +438,24 @@ func buildRebindPlan(selector, target string) (migrationPlan, core.Registry, cor
 }
 
 func probeMigrationTarget(path string) (string, core.WorkspaceProbe, error) {
+	if _, statErr := os.Stat(path); statErr != nil {
+		if errors.Is(statErr, os.ErrNotExist) {
+			return "", core.WorkspaceProbe{}, errors.New(reasonTargetNotFound)
+		}
+		return "", core.WorkspaceProbe{}, errors.New(reasonGitProbeFailed)
+	}
 	canonical, err := workspace.CanonicalPath(path)
 	if err != nil {
-		return "", core.WorkspaceProbe{}, errors.New(reasonTargetNotGit)
+		return "", core.WorkspaceProbe{}, errors.New(reasonGitProbeFailed)
 	}
 	probe, err := (workspace.Prober{}).Probe(canonical)
-	if err != nil || probe.Topology == core.TopologyNonGit || probe.GitRoot == "" {
+	if err != nil {
+		return "", core.WorkspaceProbe{}, errors.New(reasonGitProbeFailed)
+	}
+	if probe.Topology == core.TopologyNonGit || probe.GitRoot == "" {
+		if _, gitErr := os.Stat(filepath.Join(canonical, ".git")); gitErr == nil {
+			return "", core.WorkspaceProbe{}, errors.New(reasonGitRepositoryInaccessible)
+		}
 		return "", core.WorkspaceProbe{}, errors.New(reasonTargetNotGit)
 	}
 	return probe.GitRoot, probe, nil
@@ -579,11 +594,22 @@ func emitMigrationPlan(stdout io.Writer, plan migrationPlan, jsonOutput bool) {
 		fmt.Fprintln(stdout, string(data))
 		return
 	}
-	fmt.Fprintf(stdout, "%s status=%s reason=%s target=%s requires_confirmation=%t\n", plan.Command, plan.Status, plan.Reason, plan.Target, plan.RequiresConfirmation)
+	label := "READY"
+	if plan.Status == "failed" {
+		label = "BLOCKED"
+	}
+	if plan.Status == "planned" || plan.Status == "confirmation_required" {
+		label = "WARNING"
+	}
+	fmt.Fprintf(stdout, "%s: %s\nTarget: %s\nReason: %s\n", strings.Title(plan.Command), label, plan.Target, plan.Reason)
+	if plan.RequiresConfirmation {
+		fmt.Fprintln(stdout, "Action: review the plan and rerun with --confirm if approved.")
+	}
 	if plan.PreconditionFingerprint != "" {
-		fmt.Fprintf(stdout, "precondition_fingerprint=%s\n", plan.PreconditionFingerprint)
+		fmt.Fprintf(stdout, "Precondition: captured\n")
 	}
 	for _, operation := range plan.Operations {
-		fmt.Fprintf(stdout, "operation=%s path=%s size=%d sha256=%s\n", operation.Kind, operation.Path, operation.Size, operation.SHA256)
+		fmt.Fprintf(stdout, "Plan: %s %s\n", operation.Kind, operation.Path)
 	}
+	fmt.Fprintf(stdout, "\n%s\n", strings.ToUpper(plan.Status))
 }

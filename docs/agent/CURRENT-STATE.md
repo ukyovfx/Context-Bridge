@@ -7,7 +7,7 @@ basis_date: 2026-09-10T07:48:26Z
 
 # Context Bridge Current State
 
-Status: V1.2 Phase 3 implemented, locally verified, and pushed; hosted CI blocked externally before steps started
+Status: V1.2 Phase 3 and focused V1.2.x UX/diagnostics polish implemented, locally verified, and pushed; hosted CI blocked externally before steps started
 
 ## Implemented
 
@@ -21,6 +21,7 @@ Status: V1.2 Phase 3 implemented, locally verified, and pushed; hosted CI blocke
 - V1.2 Phase 3 explicit `adopt`, `upgrade`, and `rebind` plan/apply flows with confirmation, immediate re-probe, identity conflict rejection, recoverable Manifest V1 backup, and registry-only rebind mutation
 - Manifest V2 generated-template provenance with Manifest V1 read compatibility
 - Separate CURRENT-STATE content integrity, basis validity, and basis freshness
+- V1.2.x human summaries with explicit PASS/WARNING/BLOCKED terminal labels, deduplicated warning metadata, clear provenance wording, explicit absent Claude/Cursor configuration diagnostics, and distinct Git target/probe/access failure reasons
 
 ## Verified on Windows
 
@@ -37,6 +38,7 @@ Status: V1.2 Phase 3 implemented, locally verified, and pushed; hosted CI blocke
 - Actual KitsuSync diagnostics: Codex Guard `PASS` and `READY_WITH_WARNINGS` for global instruction presence and unobserved agent configuration; Claude and Cursor Guard `PASS` and `READY` with no discovered instruction sources
 - Actual KitsuSync migration planning was read-only: adopt produced a Manifest V2 plan, upgrade reported `MANIFEST_CONFLICT` because no Context Bridge manifest exists, and same-path rebind reported `ALREADY_REBOUND`; no apply was run
 - Migration regression coverage proves adopt of clean/dirty repositories, owned-file conflict, V1-to-V2 upgrade, recoverable backup, repeated no-op, unknown-newer refusal, rebind move, unrelated repository rejection, confirmation, registry-only mutation, and identity-change abort
+- UX/diagnostics regression coverage proves concise human output, warning severity/action mapping, warning deduplication, absent Claude/Cursor configuration reporting, and inaccessible-Git versus non-Git migration probe classification
 - Unit and integration tests cover wrong path/Git root/git-dir/common-dir/remote/branch, linked worktrees, independent clones, detached HEAD, local-only unique evidence, and identity change between plan and apply
 
 ## GitHub verification

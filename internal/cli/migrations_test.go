@@ -202,6 +202,25 @@ func TestRevalidateRepositoryRejectsIdentityChange(t *testing.T) {
 	}
 }
 
+func TestMigrationProbeDistinguishesInaccessibleGitFromNonGit(t *testing.T) {
+	target := filepath.Join(t.TempDir(), "untrusted")
+	if err := os.MkdirAll(filepath.Join(target, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := probeMigrationTarget(target)
+	if err == nil || err.Error() != reasonGitRepositoryInaccessible {
+		t.Fatalf("expected inaccessible Git reason, got %v", err)
+	}
+	nonGit := filepath.Join(t.TempDir(), "plain")
+	if err := os.MkdirAll(nonGit, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = probeMigrationTarget(nonGit)
+	if err == nil || err.Error() != reasonTargetNotGit {
+		t.Fatalf("expected non-Git reason, got %v", err)
+	}
+}
+
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil

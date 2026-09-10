@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/ukyovfx/Context-Bridge/internal/workspace"
 )
@@ -82,5 +83,7 @@ func emitDiscoveryResult(stdout io.Writer, result workspace.DiscoveryResult, jso
 	for _, issue := range result.Errors {
 		fmt.Fprintf(stdout, "discovery-error\t%s\t%s\n", issue.Reason, issue.Path)
 	}
-	fmt.Fprintf(stdout, "discovery terminal_status=%s root=%s candidates=%d skipped=%d traversal_limit_reached=%t\n", result.Status, result.RootOrRequestedRoot(), result.CandidateCount, result.SkippedCount, result.TraversalLimitReached)
+	fmt.Fprintf(stdout, "Root: %s\nCandidates: %d\nDirectories skipped: %d\nTraversal limit reached: %t\n", result.RootOrRequestedRoot(), result.CandidateCount, result.SkippedCount, result.TraversalLimitReached)
+	fmt.Fprintf(stdout, "discovery terminal_status=%s\n", result.Status)
+	fmt.Fprintf(stdout, "\n%s\n", strings.ToUpper(string(result.Status)))
 }
