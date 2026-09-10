@@ -31,6 +31,12 @@ func Run(args []string, stdout, stderr io.Writer, version string) int {
 		err = runHandoff(args[1:], stdout, stderr)
 	case "instructions":
 		err = runInstructions(args[1:], stdout, stderr)
+	case "adopt":
+		err = runAdopt(args[1:], stdout, stderr, version)
+	case "upgrade":
+		err = runUpgrade(args[1:], stdout, stderr, version)
+	case "rebind":
+		err = runRebind(args[1:], stdout, stderr)
 	case "version":
 		if len(args) != 1 {
 			err = errors.New("version accepts no arguments")
@@ -64,5 +70,8 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, "  contextbridge discover --root <path> [--json]")
 	fmt.Fprintln(w, "  contextbridge handoff <project> --task \"<intent>\" [--agent codex|claude|cursor] [--json]")
 	fmt.Fprintln(w, "  contextbridge instructions --explain [--project PATH] [--agent codex|claude|cursor] [--json]")
+	fmt.Fprintln(w, "  contextbridge adopt <path> [--dry-run] [--confirm] [--json]")
+	fmt.Fprintln(w, "  contextbridge upgrade <path> [--dry-run] [--confirm] [--json]")
+	fmt.Fprintln(w, "  contextbridge rebind <project> --workspace <path> [--dry-run] [--confirm] [--json]")
 	fmt.Fprintln(w, "  contextbridge version")
 }

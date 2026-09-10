@@ -25,6 +25,9 @@ contextbridge guard --project <id-or-alias> [--workspace <id-or-path>]
 contextbridge discover --root <path> [--json]
 contextbridge handoff <project> --task "<intent>" [--agent codex|claude|cursor] [--json]
 contextbridge instructions --explain [--project PATH] [--agent codex|claude|cursor] [--json]
+contextbridge adopt <path> [--dry-run] [--confirm] [--json]
+contextbridge upgrade <path> [--dry-run] [--confirm] [--json]
+contextbridge rebind <project> --workspace <path> [--dry-run] [--confirm] [--json]
 contextbridge version
 ```
 
@@ -52,6 +55,8 @@ JSON discovery always includes the requested root, terminal status, candidate an
 `handoff` resolves a registered project by exact ID, display name, or alias, selects its registered canonical workspace, re-probes it, and runs the Workspace Guard before emitting a deterministic, read-only handoff. The handoff contains portable project/repository identity, canonical workspace facts, context entrypoint references, task intent, derived verification requirements, accepted-state evidence, and thin adapter hints for Codex, Claude, or Cursor. It never persists a Task or AgentSession, starts an agent, changes the registry, or changes the workspace. Guard failure is a hard `WRONG_WORKSPACE` stop with no runnable handoff. If durable verification instructions are absent, the handoff reports `UNVERIFIED` and `NO_VERIFICATION_CONTRACT` rather than inventing commands.
 
 `instructions --explain` inspects effective instruction sources and safely observable agent environment metadata for Codex, Claude Code, or Cursor. It reports ordered source paths, sizes, SHA-256 hashes, repository containment, basis-change evidence where available, configuration scope, and readiness warnings without copying instruction contents or changing agent configuration. `doctor --agent` adds the same read-only diagnostics to the existing project doctor flow.
+
+`adopt` explicitly adds a Context Bridge Manifest V2 to an existing branch-attached Git repository without changing Git history or the registry. `upgrade` explicitly migrates a Context Bridge Manifest V1 to V2, preserving the old manifest as `.contextbridge/manifest.json.v1.bak`. `rebind` explicitly updates only the machine-local canonical workspace record after a legitimate move. All three commands print a plan, require `--confirm` for mutation, re-probe immediately before mutation, and reject identity conflicts. `--dry-run` never prompts and never mutates.
 
 ## Identity model
 
