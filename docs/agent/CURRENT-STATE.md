@@ -1,13 +1,13 @@
 ---
 contextbridge_state_schema: 1
 basis_branch: main
-basis_commit: 35c3f754c02ca83af8e59610147b249f74f8c277
-basis_date: 2026-09-10T14:59:35Z
+basis_commit: d29f9f3441f6a920ac7b34dd370bfcdf295468b0
+basis_date: 2026-09-15T11:11:33Z
 ---
 
 # Context Bridge Current State
 
-Status: Packaging / Onboarding V1 frozen after completion audit; installer, portable distribution, and CLI onboarding verified locally; hosted CI remains externally blocked
+Status: Packaging / Onboarding V1 frozen after completion audit; installer, portable distribution, CLI onboarding, and hosted CI verified
 
 ## Implemented
 
@@ -41,11 +41,11 @@ Status: Packaging / Onboarding V1 frozen after completion audit; installer, port
 - `scripts/e2e-local.ps1`: passed
 - E2E proved init and registration dry-runs, existing-repository registration, discovery, and guard behavior without unintended repository or registry mutation
 - Discovery anomaly regression coverage proves empty, partial, bounded, access-limited, reparse-skipped, warning, and JSON terminal states
-- Actual read-only scans: `C:\Users\mynti\Documents` returned `partial` with 2 candidates, 1 skipped directory, and `PROBE_EVIDENCE_INCOMPLETE`/`MAX_DEPTH_REACHED`; `C:\AI-Workspace` returned `success` with 3 candidates
-- Actual read-only KitsuSync handoff: `KitsuSync-clean` resolved to its registered project, repository, canonical workspace, and `Guard allowed=true`; durable `AGENTS.md` verification instructions resolved to three commands; CURRENT-STATE evidence remained explicitly unverified because the workspace has no Context Bridge CURRENT-STATE provenance
+- Disposable read-only discovery fixtures returned the documented terminal states and preserved repository and registry state
+- Read-only handoff, instruction, doctor, guard, migration, and knowledge-doctor checks passed in disposable fixtures; unverified provenance and missing optional knowledge directories were reported as warnings
 - Handoff regression coverage proves exact/alias resolution, ambiguity, missing canonical workspace/path, guard failure, read-only behavior, deterministic output, remote redaction, stale state, missing verification contract, and thin agent adapters
 - Instruction diagnostics regression coverage proves nested instruction chains, override files, size/truncation risk, isolated CODEX_HOME, Claude imports/local files/rules, Cursor rules, redaction, unknown agents, and zero-mutation behavior
-- Actual KitsuSync diagnostics: Codex Guard `PASS` and `READY_WITH_WARNINGS` for global instruction presence and unobserved agent configuration; Claude and Cursor Guard `PASS` and `READY` with no discovered instruction sources
+- Disposable provider diagnostics: Codex Guard and readiness warnings were reported without changing agent configuration; Claude and Cursor diagnostics completed with no discovered instruction sources
 - Actual KitsuSync migration planning was read-only: adopt produced a Manifest V2 plan, upgrade reported `MANIFEST_CONFLICT` because no Context Bridge manifest exists, and same-path rebind reported `ALREADY_REBOUND`; no apply was run
 - Migration regression coverage proves adopt of clean/dirty repositories, owned-file conflict, V1-to-V2 upgrade, recoverable backup, repeated no-op, unknown-newer refusal, rebind move, unrelated repository rejection, confirmation, registry-only mutation, and identity-change abort
 - UX/diagnostics regression coverage proves concise human output, warning severity/action mapping, warning deduplication, absent Claude/Cursor configuration reporting, and inaccessible-Git versus non-Git migration probe classification
@@ -62,12 +62,10 @@ Status: Packaging / Onboarding V1 frozen after completion audit; installer, port
 - Final Windows installer audit passed with Inno Setup 7.1.0: clean per-user install, fresh-shell PATH/version resolution, setup with isolated Codex bootstrap, `new`, `integrate`, ChatGPT bootstrap, same-version reinstall, state preservation, PATH de-duplication, uninstall, repository preservation, unrelated instruction preservation, and fresh-shell non-resolution after uninstall
 - Final release artifacts include the Windows installer, Windows portable ZIP, Linux archive, `SHA256SUMS`, and `release-manifest.json`; independent hashes matched, manifest version was `v1.2.0-phase5-test.1`, and the portable binary reported the same version
 - Final installer audit found no repository/temp path, signing-secret marker, or private-key marker in the installer payload; the installer metadata reported product version `1.2.0-phase5-test.1`
-
-## External blocker
-
-GitHub Actions run `34427978671` for the reviewed product basis completed with no workflow steps. Its check annotation reports failed recent account payments or a spending-limit issue. Hosted CI is therefore unverified; this is not evidence of a code-test failure.
+- Hosted CI run `34961905308` passed on release basis commit `d29f9f3441f6a920ac7b34dd370bfcdf295468b0`; unit tests, formatting, static checks, and Local E2E all completed successfully
 
 ## Remaining risk
 
-- Resolve the GitHub billing or spending-limit issue and rerun hosted CI.
+- No stable tag or GitHub Release has been published yet; release publication remains an explicit approval step.
+- The installer is unsigned because no signing identity is configured.
 - V1.1 guards Context Bridge-mediated mutations; external tools can still bypass Context Bridge and write directly.

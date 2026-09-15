@@ -208,4 +208,4 @@ Manifest V2 never stores local workspace paths and does not use the mutable `CUR
 
 V1.2 has no persistent Task or AgentSession model, managed worktree lifecycle, cleanup or deletion execution, agent launcher, daemon, dashboard/TUI, PR or issue orchestration, Codex internal-state parsing, automatic agent-configuration writes, AI/model/API calls, secret persistence, destructive Git commands, organization support, automatic AI-Knowledge writes, GUI, MCP, vector database, or Obsidian plugin. Explicit `setup --codex-bootstrap` may manage only its marked global Context Bridge block; it does not modify `config.toml` or unrelated content. Obsidian is only a passive Markdown viewer. `adopt`, `upgrade`, and `rebind` remain explicit plan/apply operations; none is automatic.
 
-Hosted CI is currently externally blocked by a GitHub billing or spending-limit issue. Local verification remains authoritative for this release-candidate decision; hosted CI is not claimed as passing.
+Hosted CI passed for the reviewed release basis commit. No stable tag or GitHub Release has been published yet; publication remains an explicit release action.

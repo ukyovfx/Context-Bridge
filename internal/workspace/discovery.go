@@ -105,6 +105,14 @@ func (r DiscoveryResult) RootOrRequestedRoot() string {
 
 type Discoverer struct {
 	Prober Prober
+	now    func() time.Time
+}
+
+func (d Discoverer) currentTime() time.Time {
+	if d.now != nil {
+		return d.now()
+	}
+	return time.Now()
 }
 
 func (d Discoverer) Discover(options DiscoveryOptions) (DiscoveryResult, error) {
@@ -161,7 +169,7 @@ func (d Discoverer) Discover(options DiscoveryOptions) (DiscoveryResult, error) 
 		return result, nil
 	}
 	seenRoots := map[string]bool{}
-	deadline := time.Now().Add(options.MaxDuration)
+	deadline := d.currentTime().Add(options.MaxDuration)
 	entriesScanned := 0
 	partial := false
 	addWarning := func(path, reason string) {
@@ -178,7 +186,7 @@ func (d Discoverer) Discover(options DiscoveryOptions) (DiscoveryResult, error) 
 		if result.LimitReached {
 			return
 		}
-		if time.Now().After(deadline) {
+		if d.currentTime().After(deadline) {
 			result.SkippedCount++
 			markLimit(directory, ReasonTimeLimitReached)
 			return

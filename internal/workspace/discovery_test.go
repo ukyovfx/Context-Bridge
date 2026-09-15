@@ -48,10 +48,15 @@ func TestDiscoveryReportsTimeLimit(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(root, "child"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// Ensure the already-expired test deadline is deterministic without changing
-	// Discoverer's production timeout behavior.
-	time.Sleep(time.Millisecond)
-	result, err := (Discoverer{}).Discover(DiscoveryOptions{Root: root, MaxDuration: 1})
+	base := time.Now()
+	clockCalls := 0
+	result, err := (Discoverer{now: func() time.Time {
+		clockCalls++
+		if clockCalls == 1 {
+			return base
+		}
+		return base.Add(time.Second)
+	}}).Discover(DiscoveryOptions{Root: root, MaxDuration: time.Nanosecond})
 	if err != nil {
 		t.Fatal(err)
 	}
