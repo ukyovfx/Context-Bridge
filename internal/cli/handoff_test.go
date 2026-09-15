@@ -139,6 +139,49 @@ func TestHandoffAllowsBranchChangeAndFailsClosedForMissingProject(t *testing.T) 
 	}
 }
 
+func TestHandoffKitsuSyncIncludesWorktreeAndRepositoryWorkWithoutLocalDiagnostics(t *testing.T) {
+	fixture := newHandoffFixture(t)
+	planDir := filepath.Join(fixture.repository, "docs", "agent", "plans", "active")
+	if err := os.MkdirAll(planDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(planDir, "PRODUCTION-VERIFICATION.md"), []byte("# Production verification\n\n## Goal\nPrepare the next deployment.\n\n## Remaining production gate\nAn authorized operator must stage the bundle.\n\n## Verification status\nOff-production checks are pending.\n\n## Next action\nRun the remaining local checks before operator handoff.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fixture.repository, "product.txt"), []byte("modified\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fixture.repository, "staged.txt"), []byte("staged\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runTestGit(t, fixture.repository, "add", "staged.txt")
+	if err := os.WriteFile(filepath.Join(fixture.repository, "untracked.txt"), []byte("untracked\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CONTEXTBRIDGE_HOME", fixture.registryHome)
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"handoff", fixture.project.ID, "--task", "Continue production verification", "--json"}, &stdout, &stderr, "test"); code != 0 {
+		t.Fatalf("handoff failed: %s\n%s", stderr.String(), stdout.String())
+	}
+	var result handoffResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Handoff == nil || result.Handoff.Worktree.Status != "dirty" || !result.Handoff.Worktree.Staged || !result.Handoff.Worktree.Unstaged || !result.Handoff.Worktree.Untracked {
+		t.Fatalf("worktree state was not summarized: %#v", result.Handoff)
+	}
+	work := result.Handoff.RepositoryWork
+	if work.ActiveTask != "Production verification" || work.Goal == "" || work.CurrentState == "" || work.Blocker == "" || work.VerificationStatus == "" || work.NextSafeAction == "" {
+		t.Fatalf("repository work was incomplete: %#v", work)
+	}
+	if !strings.Contains(work.NextSafeAction, "Run the remaining local checks") || len(work.Evidence) != 2 {
+		t.Fatalf("next action or evidence was not prioritized: %#v", work)
+	}
+	if strings.Contains(stdout.String(), "agent_diagnostics") || strings.Contains(stdout.String(), ".codex") {
+		t.Fatalf("portable handoff leaked local diagnostics: %s", stdout.String())
+	}
+}
+
 func TestResolveHandoffProjectReportsAmbiguity(t *testing.T) {
 	first := core.ProjectRecord{ID: "prj_11111111-1111-4111-8111-111111111111", DisplayName: "one"}
 	second := core.ProjectRecord{ID: "prj_22222222-2222-4222-8222-222222222222", DisplayName: "two", Aliases: []string{"one"}}
@@ -238,7 +281,7 @@ func newHandoffFixture(t *testing.T) handoffFixture {
 	runTestGit(t, repository, "add", ".")
 	runTestGit(t, repository, "commit", "-m", "product")
 	basis := strings.TrimSpace(string(runGitOutput(t, repository, "rev-parse", "HEAD")))
-	currentState := "---\ncontextbridge_state_schema: 1\nbasis_branch: main\nbasis_commit: " + basis + "\nbasis_date: " + time.Now().UTC().Format(time.RFC3339) + "\n---\n# Current State\n"
+	currentState := "---\ncontextbridge_state_schema: 1\nbasis_branch: main\nbasis_commit: " + basis + "\nbasis_date: " + time.Now().UTC().Format(time.RFC3339) + "\n---\n# Current State\n\nStatus: fixture baseline verified\n"
 	if err := os.WriteFile(filepath.Join(repository, "docs", "agent", "CURRENT-STATE.md"), []byte(currentState), 0o644); err != nil {
 		t.Fatal(err)
 	}

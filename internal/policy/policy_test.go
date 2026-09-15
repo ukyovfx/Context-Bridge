@@ -23,6 +23,7 @@ func TestTaskClassificationUsesConservativeReadOnlyDefault(t *testing.T) {
 	}{
 		{"read only", "Establish current state and report status", IntentReadOnly},
 		{"explicit override", "Fix the issue, but do not modify files", IntentReadOnly},
+		{"without modifying", "Continue verification without modifying files", IntentReadOnly},
 		{"implementation", "Implement the guard fix", IntentImplementation},
 		{"review", "Audit the registry behavior", IntentReview},
 		{"investigation", "Determine cause of the timeout", IntentInvestigation},

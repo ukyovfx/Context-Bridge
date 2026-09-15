@@ -20,7 +20,7 @@ const (
 
 func ClassifyTask(task string) TaskIntent {
 	lower := strings.ToLower(strings.TrimSpace(task))
-	if containsAny(lower, "do not modify", "don't modify", "read-only", "read only", "report only", "establish current state", "report status", "summarize", "inspect", "explain", "find", "compare without modifying") {
+	if containsAny(lower, "do not modify", "don't modify", "without modifying", "read-only", "read only", "report only", "establish current state", "report status", "summarize", "inspect", "explain", "find", "compare without modifying") {
 		return IntentReadOnly
 	}
 	if containsAny(lower, "review", "audit", "assess", "critique") {

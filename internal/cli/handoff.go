@@ -70,6 +70,26 @@ type agentHints struct {
 	Notes                []string `json:"notes,omitempty"`
 }
 
+// handoffWorktree is the concise, portable summary of mutable Git state.
+type handoffWorktree struct {
+	Status    string `json:"status"`
+	Staged    bool   `json:"staged"`
+	Unstaged  bool   `json:"unstaged"`
+	Untracked bool   `json:"untracked"`
+}
+
+// handoffRepositoryWork contains only repository-grounded work signals. Empty
+// fields mean that the corresponding evidence was not present in the repo.
+type handoffRepositoryWork struct {
+	ActiveTask         string   `json:"active_task,omitempty"`
+	Goal               string   `json:"goal,omitempty"`
+	CurrentState       string   `json:"current_state,omitempty"`
+	Blocker            string   `json:"blocker,omitempty"`
+	VerificationStatus string   `json:"verification_status,omitempty"`
+	NextSafeAction     string   `json:"next_safe_action,omitempty"`
+	Evidence           []string `json:"evidence,omitempty"`
+}
+
 type handoffDocument struct {
 	SchemaVersion      int                   `json:"schema_version"`
 	Agent              string                `json:"agent"`
@@ -84,17 +104,21 @@ type handoffDocument struct {
 	Head               string                `json:"head,omitempty"`
 	BaseCommit         string                `json:"base_commit"`
 	RepositoryIdentity core.RemoteIdentity   `json:"repository_identity"`
+	Worktree           handoffWorktree       `json:"worktree"`
+	RepositoryWork     handoffRepositoryWork `json:"repository_work,omitempty"`
 	ContextEntrypoints []string              `json:"context_entrypoints,omitempty"`
 	AcceptedState      state.Report          `json:"accepted_state"`
 	TaskIntent         string                `json:"task_intent"`
 	TaskIntentType     policy.TaskIntent     `json:"task_intent_type"`
 	Verification       verificationContract  `json:"verification"`
 	Guard              handoffGuard          `json:"guard"`
-	AgentDiagnostics   agentDiagnostics      `json:"agent_diagnostics"`
-	AgentHints         agentHints            `json:"agent_hints"`
-	ExecutionPrompt    string                `json:"execution_prompt"`
-	Recommendation     policy.Recommendation `json:"model_recommendation"`
-	GeneratedAt        string                `json:"generated_at"`
+	// Detailed local diagnostics are available through `instructions --explain`;
+	// they are intentionally excluded from the portable handoff.
+	AgentDiagnostics agentDiagnostics      `json:"-"`
+	AgentHints       agentHints            `json:"agent_hints"`
+	ExecutionPrompt  string                `json:"execution_prompt"`
+	Recommendation   policy.Recommendation `json:"model_recommendation"`
+	GeneratedAt      string                `json:"generated_at"`
 }
 
 type handoffResult struct {
@@ -245,6 +269,7 @@ func runHandoff(args []string, stdout, stderr io.Writer) error {
 	}
 	profile := inferTaskProfile(*task, verification, entrypoints, policy.CreditState(*creditState))
 	recommendation := policy.Recommend(profile)
+	repositoryWork := summarizeRepositoryWork(root, probe, verification)
 	prompt := policy.BuildExecutionPrompt(policy.PromptInput{
 		Intent:                  profile.Intent,
 		Goal:                    *task,
@@ -252,7 +277,7 @@ func runHandoff(args []string, stdout, stderr io.Writer) error {
 		Verification:            verification.RequiredCommands,
 		AcceptedStateUnverified: acceptedStateUnverified(verification.CurrentState),
 	})
-	document := makeHandoffDocument(project, repository, registered, probe, verification, baseCommit, *task, profile.Intent, *agent, entrypoints, guard, diagnosticResult.Diagnostics, prompt, recommendation)
+	document := makeHandoffDocument(project, repository, registered, probe, verification, baseCommit, *task, profile.Intent, *agent, entrypoints, guard, diagnosticResult.Diagnostics, prompt, recommendation, repositoryWork)
 	result.Handoff = &document
 	result.Status = handoffReady
 	if len(result.Warnings) > 0 {
@@ -350,6 +375,146 @@ func resolveVerification(root string, entrypoints []string) (verificationContrac
 	return contract, baseCommit
 }
 
+func worktreeStatus(probe core.WorkspaceProbe) string {
+	if probe.Staged || probe.Unstaged || probe.Untracked {
+		return "dirty"
+	}
+	return "clean"
+}
+
+func summarizeRepositoryWork(root string, probe core.WorkspaceProbe, verification verificationContract) handoffRepositoryWork {
+	work := handoffRepositoryWork{Evidence: []string{}}
+	statePath := filepath.Join(root, "docs", "agent", "CURRENT-STATE.md")
+	if data, err := os.ReadFile(statePath); err == nil {
+		work.CurrentState = firstLabeledLine(string(data), "Status")
+		if work.CurrentState == "" {
+			work.CurrentState = firstSectionSummary(string(data), "Current state")
+		}
+		if work.CurrentState == "" {
+			work.CurrentState = firstSectionSummary(string(data), "Active work")
+		}
+		if work.CurrentState == "" {
+			work.CurrentState = firstDocumentSectionSummary(string(data))
+		}
+		work.Evidence = append(work.Evidence, "docs/agent/CURRENT-STATE.md")
+	}
+	planDir := filepath.Join(root, "docs", "agent", "plans", "active")
+	plans, _ := filepath.Glob(filepath.Join(planDir, "*.md"))
+	sort.Strings(plans)
+	for _, plan := range plans {
+		if filepath.Base(plan) == ".gitkeep" {
+			continue
+		}
+		data, err := os.ReadFile(plan)
+		if err != nil {
+			continue
+		}
+		contents := string(data)
+		work.ActiveTask = firstHeading(contents)
+		work.Goal = firstSectionSummary(contents, "Goal")
+		work.Blocker = firstSectionSummary(contents, "Blocker")
+		if work.Blocker == "" {
+			work.Blocker = firstSectionSummary(contents, "Remaining production gate")
+		}
+		work.VerificationStatus = firstSectionSummary(contents, "Verification status")
+		work.NextSafeAction = firstSectionSummary(contents, "Next action")
+		work.Evidence = append(work.Evidence, filepath.ToSlash(filepath.Join("docs", "agent", "plans", "active", filepath.Base(plan))))
+		break
+	}
+	if work.VerificationStatus == "" {
+		if verification.Status != "" {
+			work.VerificationStatus = verification.Status
+		}
+	}
+	if work.NextSafeAction == "" {
+		work.NextSafeAction = prioritizedNextAction(work, verification, probe)
+	}
+	if len(work.Evidence) == 0 {
+		work.Evidence = nil
+	}
+	return work
+}
+
+func prioritizedNextAction(work handoffRepositoryWork, verification verificationContract, probe core.WorkspaceProbe) string {
+	if work.NextSafeAction != "" {
+		return work.NextSafeAction
+	}
+	if verification.Status == "UNVERIFIED" {
+		return "review the repository verification route before proceeding"
+	}
+	if len(probe.EvidenceErrors) > 0 {
+		return "review Git probe evidence before proceeding"
+	}
+	return "proceed with the requested task after reading the repository context"
+}
+
+func firstHeading(contents string) string {
+	for _, line := range strings.Split(strings.ReplaceAll(contents, "\r\n", "\n"), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "# ") {
+			return strings.TrimSpace(strings.TrimPrefix(trimmed, "# "))
+		}
+	}
+	return ""
+}
+
+func firstLabeledLine(contents, label string) string {
+	prefix := strings.ToLower(label) + ":"
+	for _, line := range strings.Split(strings.ReplaceAll(contents, "\r\n", "\n"), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(strings.ToLower(trimmed), prefix) {
+			return strings.TrimSpace(trimmed[len(prefix):])
+		}
+	}
+	return ""
+}
+
+func firstSectionSummary(contents, heading string) string {
+	lines := strings.Split(strings.ReplaceAll(contents, "\r\n", "\n"), "\n")
+	active := false
+	var values []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "#") {
+			name := strings.TrimSpace(strings.TrimLeft(trimmed, "#"))
+			if active {
+				break
+			}
+			active = strings.EqualFold(name, heading)
+			continue
+		}
+		if active && trimmed != "" {
+			trimmed = strings.TrimSpace(strings.TrimLeft(trimmed, "-*"))
+			if trimmed != "" {
+				values = append(values, trimmed)
+			}
+		}
+	}
+	return compactSummary(strings.Join(values, " "))
+}
+
+func firstDocumentSectionSummary(contents string) string {
+	lines := strings.Split(strings.ReplaceAll(contents, "\r\n", "\n"), "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "## ") {
+			heading := strings.TrimSpace(strings.TrimPrefix(trimmed, "## "))
+			if summary := firstSectionSummary(contents, heading); summary != "" {
+				return heading + ": " + summary
+			}
+		}
+	}
+	return ""
+}
+
+func compactSummary(value string) string {
+	value = strings.Join(strings.Fields(value), " ")
+	if len(value) > 500 {
+		return value[:497] + "..."
+	}
+	return value
+}
+
 func verificationCommands(contents string) []string {
 	lines := strings.Split(strings.ReplaceAll(contents, "\r\n", "\n"), "\n")
 	inRoute := false
@@ -376,12 +541,12 @@ func verificationCommands(contents string) []string {
 	return commands
 }
 
-func makeHandoffDocument(project core.ProjectRecord, repository core.RepositoryRecord, registered core.WorkspaceRecord, probe core.WorkspaceProbe, verification verificationContract, baseCommit, task string, taskType policy.TaskIntent, agent string, entrypoints []string, guard handoffGuard, diagnostics agentDiagnostics, prompt string, recommendation policy.Recommendation) handoffDocument {
+func makeHandoffDocument(project core.ProjectRecord, repository core.RepositoryRecord, registered core.WorkspaceRecord, probe core.WorkspaceProbe, verification verificationContract, baseCommit, task string, taskType policy.TaskIntent, agent string, entrypoints []string, guard handoffGuard, diagnostics agentDiagnostics, prompt string, recommendation policy.Recommendation, repositoryWork handoffRepositoryWork) handoffDocument {
 	return handoffDocument{
 		SchemaVersion: 1, Agent: agent, ProjectID: project.ID, ProjectName: project.DisplayName,
 		RepositoryID: repository.ID, WorkspaceID: registered.ID, WorkspacePath: probe.CanonicalPath,
 		GitRoot: probe.GitRoot, Branch: probe.Branch, Detached: probe.Detached, Head: probe.Head,
-		BaseCommit: baseCommit, RepositoryIdentity: repository.Identity, ContextEntrypoints: entrypoints,
+		BaseCommit: baseCommit, RepositoryIdentity: repository.Identity, Worktree: handoffWorktree{Status: worktreeStatus(probe), Staged: probe.Staged, Unstaged: probe.Unstaged, Untracked: probe.Untracked}, RepositoryWork: repositoryWork, ContextEntrypoints: entrypoints,
 		AcceptedState: verification.CurrentState, TaskIntent: task, TaskIntentType: taskType, Verification: verification, Guard: guard, AgentDiagnostics: diagnostics,
 		AgentHints: makeAgentHints(agent, probe.CanonicalPath, entrypoints, verification.RequiredCommands), ExecutionPrompt: prompt, Recommendation: recommendation,
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339Nano),
