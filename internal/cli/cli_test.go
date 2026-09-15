@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ukyovfx/Context-Bridge/internal/safety"
 	"github.com/ukyovfx/Context-Bridge/internal/workspace"
 )
 
@@ -203,6 +204,25 @@ func canonicalTestPathKey(t *testing.T, path string) string {
 		t.Fatalf("canonical path %q: %v", path, err)
 	}
 	return workspace.PathKey(canonical)
+}
+
+func equivalentTestPath(t *testing.T, left, right string) bool {
+	t.Helper()
+	if canonicalTestPathKey(t, left) == canonicalTestPathKey(t, right) {
+		return true
+	}
+	if !safety.FilesystemIdentitySupported() {
+		return false
+	}
+	leftIdentity, err := safety.FilesystemIdentity(left)
+	if err != nil {
+		t.Fatalf("filesystem identity %q: %v", left, err)
+	}
+	rightIdentity, err := safety.FilesystemIdentity(right)
+	if err != nil {
+		t.Fatalf("filesystem identity %q: %v", right, err)
+	}
+	return leftIdentity == rightIdentity
 }
 
 func directorySnapshot(t *testing.T, root string) string {

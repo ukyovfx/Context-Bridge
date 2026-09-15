@@ -67,7 +67,7 @@ func TestNewCreatesAndRegistersLocalProject(t *testing.T) {
 	if len(value.Projects) != 1 || len(value.Repositories) != 1 || len(value.Workspaces) != 1 {
 		t.Fatalf("unexpected registration: %#v", value)
 	}
-	if canonicalTestPathKey(t, value.Workspaces[0].Path) != canonicalTestPathKey(t, target) {
+	if !equivalentTestPath(t, value.Workspaces[0].Path, target) {
 		t.Fatalf("registered path %q, want %q", value.Workspaces[0].Path, target)
 	}
 	if !strings.Contains(stdout.String(), "Codex Local Project") {

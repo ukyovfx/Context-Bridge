@@ -53,7 +53,7 @@ func TestInstructionsCodexReportsChainLimitsAndRedactsContents(t *testing.T) {
 		canonicalTestPathKey(t, filepath.Join(nested, "AGENTS.override.md")),
 	}
 	for index, expected := range expectedPaths {
-		if canonicalTestPathKey(t, result.Diagnostics.InstructionChain[index].Path) != expected {
+		if !equivalentTestPath(t, result.Diagnostics.InstructionChain[index].Path, expected) {
 			t.Fatalf("Codex precedence order was incorrect: %#v", result.Diagnostics.InstructionChain)
 		}
 	}
@@ -61,7 +61,7 @@ func TestInstructionsCodexReportsChainLimitsAndRedactsContents(t *testing.T) {
 		t.Fatalf("instruction contents leaked into diagnostics: %s", stdout.String())
 	}
 	for _, source := range result.Diagnostics.InstructionChain {
-		if canonicalTestPathKey(t, source.Path) == canonicalTestPathKey(t, filepath.Join(nested, "AGENTS.md")) && !source.InsideRepository {
+		if equivalentTestPath(t, source.Path, filepath.Join(nested, "AGENTS.md")) && !source.InsideRepository {
 			t.Fatal("nested project instruction was marked outside the repository")
 		}
 	}

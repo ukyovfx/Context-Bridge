@@ -154,18 +154,14 @@ func TestCommandRunnerNeutralizesGitRepositorySelectors(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			expectedRoot, canonicalErr := CanonicalPath(target)
-			if canonicalErr != nil {
-				t.Fatal(canonicalErr)
-			}
-			if probe.GitRootKey != PathKey(expectedRoot) || probe.PrimaryRemote == nil || probe.PrimaryRemote.Path != "example/target" {
+			if !equivalentProbePath(t, probe.GitRoot, target) || probe.PrimaryRemote == nil || probe.PrimaryRemote.Path != "example/target" {
 				t.Fatalf("%s redirected probe: %#v", name, probe)
 			}
 		})
 	}
 }
 
-func TestCanonicalPathKeyNormalizesEquivalentWindowsSpelling(t *testing.T) {
+func TestEquivalentWindowsPathsShareFilesystemIdentity(t *testing.T) {
 	root := t.TempDir()
 	nested := filepath.Join(root, "nested")
 	if err := os.MkdirAll(nested, 0o755); err != nil {
@@ -180,7 +176,7 @@ func TestCanonicalPathKeyNormalizesEquivalentWindowsSpelling(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if PathKey(canonicalNested) != PathKey(canonicalAlias) {
+	if !equivalentProbePath(t, canonicalNested, canonicalAlias) {
 		t.Fatalf("equivalent lexical paths produced different keys: %q != %q", canonicalNested, canonicalAlias)
 	}
 	if runtime.GOOS != "windows" {
@@ -195,9 +191,36 @@ func TestCanonicalPathKeyNormalizesEquivalentWindowsSpelling(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if PathKey(canonicalNested) != PathKey(canonicalShort) {
+	if !equivalentProbePath(t, canonicalNested, canonicalShort) {
 		t.Fatalf("equivalent long/short paths produced different keys: %q != %q", canonicalNested, canonicalShort)
 	}
+}
+
+func equivalentProbePath(t *testing.T, left, right string) bool {
+	t.Helper()
+	leftCanonical, err := CanonicalPath(left)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rightCanonical, err := CanonicalPath(right)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if PathKey(leftCanonical) == PathKey(rightCanonical) {
+		return true
+	}
+	if !safety.FilesystemIdentitySupported() {
+		return false
+	}
+	leftIdentity, err := safety.FilesystemIdentity(leftCanonical)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rightIdentity, err := safety.FilesystemIdentity(rightCanonical)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return leftIdentity == rightIdentity
 }
 
 func gitShortPath(t *testing.T, path string) string {

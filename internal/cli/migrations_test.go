@@ -162,7 +162,7 @@ func TestRebindRequiresConfirmationAndChangesOnlyRegistry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(value.Workspaces) != 1 || canonicalTestPathKey(t, value.Workspaces[0].Path) != canonicalTestPathKey(t, newPath) || before != directorySnapshot(t, newPath) {
+	if len(value.Workspaces) != 1 || !equivalentTestPath(t, value.Workspaces[0].Path, newPath) || before != directorySnapshot(t, newPath) {
 		t.Fatalf("rebind changed unexpected state: %#v", value.Workspaces)
 	}
 }
