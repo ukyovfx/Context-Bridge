@@ -63,6 +63,7 @@ Status: Packaging / Onboarding V1 frozen after completion audit; installer, port
 - Final release artifacts include the Windows installer, Windows portable ZIP, Linux archive, `SHA256SUMS`, and `release-manifest.json`; independent hashes matched, manifest version was `v1.2.0-phase5-test.1`, and the portable binary reported the same version
 - Final installer audit found no repository/temp path, signing-secret marker, or private-key marker in the installer payload; the installer metadata reported product version `1.2.0-phase5-test.1`
 - Hosted CI run `34961905308` passed on release basis commit `d29f9f3441f6a920ac7b34dd370bfcdf295468b0`; unit tests, formatting, static checks, and Local E2E all completed successfully
+- Post-V1 pilot groundwork defines a replaceable external retrieval-companion boundary, optional HOT.md/INDEX.md Brain convention, authority-ordered context selection, and a local 30-day comparison plan; no runtime integration or telemetry was added
 
 ## Remaining risk
 

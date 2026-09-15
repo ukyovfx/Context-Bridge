@@ -209,3 +209,7 @@ Manifest V2 never stores local workspace paths and does not use the mutable `CUR
 V1.2 has no persistent Task or AgentSession model, managed worktree lifecycle, cleanup or deletion execution, agent launcher, daemon, dashboard/TUI, PR or issue orchestration, Codex internal-state parsing, automatic agent-configuration writes, AI/model/API calls, secret persistence, destructive Git commands, organization support, automatic AI-Knowledge writes, GUI, MCP, vector database, or Obsidian plugin. Explicit `setup --codex-bootstrap` may manage only its marked global Context Bridge block; it does not modify `config.toml` or unrelated content. Obsidian is only a passive Markdown viewer. `adopt`, `upgrade`, and `rebind` remain explicit plan/apply operations; none is automatic.
 
 Hosted CI passed for the reviewed release basis commit. No stable tag or GitHub Release has been published yet; publication remains an explicit release action.
+
+## Pilot boundary
+
+Context Bridge remains the identity, Guard, context-integrity, and verified-handoff layer. An external repository retrieval companion and an optional plain-Markdown Brain may improve context selection, but Git/GitHub remain authoritative and neither companion nor Brain is required project state. Obsidian is optional Markdown UI only. See [`docs/agent/CONTEXT-ARCHITECTURE.md`](docs/agent/CONTEXT-ARCHITECTURE.md) and [`docs/agent/PILOT.md`](docs/agent/PILOT.md) for the replaceable companion boundary, Brain convention, selection order, and 30-day local measurement plan.
