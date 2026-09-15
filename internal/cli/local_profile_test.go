@@ -153,6 +153,7 @@ func TestSetupDryRunAndDeclineDoNotWrite(t *testing.T) {
 	root := t.TempDir()
 	home := filepath.Join(root, "contextbridge-home")
 	t.Setenv("CONTEXTBRIDGE_HOME", home)
+	configureTestGitIdentity(t)
 	workspaceRoot := filepath.Join(root, "chosen")
 	oldIdentity := setupGitHubIdentity
 	setupGitHubIdentity = func() (githubIdentity, error) { return githubIdentity{Login: "test-user", Type: "User"}, nil }
@@ -186,6 +187,7 @@ func TestSetupCodexBootstrapPreviewAndApply(t *testing.T) {
 	codexHome := filepath.Join(root, "codex-home")
 	t.Setenv("CONTEXTBRIDGE_HOME", home)
 	t.Setenv("CODEX_HOME", codexHome)
+	configureTestGitIdentity(t)
 	oldIdentity := setupGitHubIdentity
 	setupGitHubIdentity = func() (githubIdentity, error) { return githubIdentity{Login: "test-user", Type: "User"}, nil }
 	defer func() { setupGitHubIdentity = oldIdentity }()

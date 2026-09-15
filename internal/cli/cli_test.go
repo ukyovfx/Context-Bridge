@@ -185,6 +185,15 @@ func runTestGit(t *testing.T, directory string, args ...string) {
 	}
 }
 
+func configureTestGitIdentity(t *testing.T) {
+	t.Helper()
+	gitConfig := filepath.Join(t.TempDir(), "gitconfig")
+	t.Setenv("GIT_CONFIG_GLOBAL", gitConfig)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	runTestGit(t, t.TempDir(), "config", "--global", "user.name", "Context Bridge Tests")
+	runTestGit(t, t.TempDir(), "config", "--global", "user.email", "contextbridge-tests@example.invalid")
+}
+
 func directorySnapshot(t *testing.T, root string) string {
 	t.Helper()
 	items := make([]string, 0)
