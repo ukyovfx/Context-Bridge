@@ -154,11 +154,60 @@ func TestCommandRunnerNeutralizesGitRepositorySelectors(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if probe.GitRootKey != PathKey(target) || probe.PrimaryRemote == nil || probe.PrimaryRemote.Path != "example/target" {
+			expectedRoot, canonicalErr := CanonicalPath(target)
+			if canonicalErr != nil {
+				t.Fatal(canonicalErr)
+			}
+			if probe.GitRootKey != PathKey(expectedRoot) || probe.PrimaryRemote == nil || probe.PrimaryRemote.Path != "example/target" {
 				t.Fatalf("%s redirected probe: %#v", name, probe)
 			}
 		})
 	}
+}
+
+func TestCanonicalPathKeyNormalizesEquivalentWindowsSpelling(t *testing.T) {
+	root := t.TempDir()
+	nested := filepath.Join(root, "nested")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(root, ".", "nested")
+	canonicalNested, err := CanonicalPath(nested)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonicalAlias, err := CanonicalPath(alias)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if PathKey(canonicalNested) != PathKey(canonicalAlias) {
+		t.Fatalf("equivalent lexical paths produced different keys: %q != %q", canonicalNested, canonicalAlias)
+	}
+	if runtime.GOOS != "windows" {
+		return
+	}
+	shortRoot := strings.TrimSpace(gitShortPath(t, root))
+	if !strings.Contains(shortRoot, "~") {
+		t.Skipf("Windows short-path alias unavailable for %q", root)
+	}
+	shortNested := filepath.Join(shortRoot, "nested")
+	canonicalShort, err := CanonicalPath(shortNested)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if PathKey(canonicalNested) != PathKey(canonicalShort) {
+		t.Fatalf("equivalent long/short paths produced different keys: %q != %q", canonicalNested, canonicalShort)
+	}
+}
+
+func gitShortPath(t *testing.T, path string) string {
+	t.Helper()
+	cmd := exec.Command("cmd", "/c", "for %I in (\""+path+"\") do @echo %~sI")
+	data, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("resolve short path %q: %v", path, err)
+	}
+	return string(data)
 }
 
 func TestCommandRunnerTimeoutIsExplicit(t *testing.T) {

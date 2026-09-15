@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/ukyovfx/Context-Bridge/internal/workspace"
 )
 
 func TestDiscoverAlwaysReportsHumanAndJSONTerminalStatus(t *testing.T) {
@@ -192,6 +194,15 @@ func configureTestGitIdentity(t *testing.T) {
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 	runTestGit(t, t.TempDir(), "config", "--global", "user.name", "Context Bridge Tests")
 	runTestGit(t, t.TempDir(), "config", "--global", "user.email", "contextbridge-tests@example.invalid")
+}
+
+func canonicalTestPathKey(t *testing.T, path string) string {
+	t.Helper()
+	canonical, err := workspace.CanonicalPath(path)
+	if err != nil {
+		t.Fatalf("canonical path %q: %v", path, err)
+	}
+	return workspace.PathKey(canonical)
 }
 
 func directorySnapshot(t *testing.T, root string) string {

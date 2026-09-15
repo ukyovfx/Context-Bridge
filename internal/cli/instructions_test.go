@@ -47,14 +47,21 @@ func TestInstructionsCodexReportsChainLimitsAndRedactsContents(t *testing.T) {
 	if len(result.Diagnostics.InstructionChain) != 3 || !hasDiagnosticReason(result.Diagnostics.Warnings, "INSTRUCTION_OVERRIDE_PRESENT") {
 		t.Fatalf("instruction chain or override warning missing: %#v", result.Diagnostics)
 	}
-	if result.Diagnostics.InstructionChain[0].Path != filepath.Join(codexHome, "AGENTS.md") || result.Diagnostics.InstructionChain[1].Path != filepath.Join(fixture.repository, "AGENTS.md") || result.Diagnostics.InstructionChain[2].Path != filepath.Join(nested, "AGENTS.override.md") {
-		t.Fatalf("Codex precedence order was incorrect: %#v", result.Diagnostics.InstructionChain)
+	expectedPaths := []string{
+		canonicalTestPathKey(t, filepath.Join(codexHome, "AGENTS.md")),
+		canonicalTestPathKey(t, filepath.Join(fixture.repository, "AGENTS.md")),
+		canonicalTestPathKey(t, filepath.Join(nested, "AGENTS.override.md")),
+	}
+	for index, expected := range expectedPaths {
+		if canonicalTestPathKey(t, result.Diagnostics.InstructionChain[index].Path) != expected {
+			t.Fatalf("Codex precedence order was incorrect: %#v", result.Diagnostics.InstructionChain)
+		}
 	}
 	if strings.Contains(stdout.String(), secret) || strings.Contains(stdout.String(), "token-value") {
 		t.Fatalf("instruction contents leaked into diagnostics: %s", stdout.String())
 	}
 	for _, source := range result.Diagnostics.InstructionChain {
-		if source.Path == filepath.Join(nested, "AGENTS.md") && !source.InsideRepository {
+		if canonicalTestPathKey(t, source.Path) == canonicalTestPathKey(t, filepath.Join(nested, "AGENTS.md")) && !source.InsideRepository {
 			t.Fatal("nested project instruction was marked outside the repository")
 		}
 	}
