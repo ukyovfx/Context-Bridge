@@ -44,7 +44,6 @@ func TestEvaluateGuardFailsClosedForEveryIdentityDimension(t *testing.T) {
 		{"remote", func(_ *GuardExpected, a *GuardActual) {
 			a.Probe.PrimaryRemote = &RemoteIdentity{Host: "evil.example", Path: "ukyovfx/Context-Bridge"}
 		}, ReasonPrimaryRemoteMismatch},
-		{"branch", func(_ *GuardExpected, a *GuardActual) { a.Probe.Branch = "feature" }, ReasonBranchMismatch},
 		{"fingerprint", func(_ *GuardExpected, a *GuardActual) { a.Probe.Fingerprint = "changed" }, ReasonIdentityChangedAfterPlan},
 	}
 	for _, test := range tests {
@@ -56,6 +55,19 @@ func TestEvaluateGuardFailsClosedForEveryIdentityDimension(t *testing.T) {
 				t.Fatalf("unexpected guard decision: %#v", decision)
 			}
 		})
+	}
+}
+
+func TestEvaluateGuardAllowsMutableGitState(t *testing.T) {
+	expected, actual := validGuardValues()
+	actual.Probe.Branch = "archive/kitsusync-clean/codex/deploy-rollback-transaction"
+	if decision := EvaluateGuard(expected, actual); !decision.Allowed {
+		t.Fatalf("legitimate branch change was treated as workspace identity drift: %#v", decision)
+	}
+	actual.Probe.Branch = ""
+	actual.Probe.Detached = true
+	if decision := EvaluateGuard(expected, actual); !decision.Allowed {
+		t.Fatalf("detached Git state was treated as workspace identity drift: %#v", decision)
 	}
 }
 

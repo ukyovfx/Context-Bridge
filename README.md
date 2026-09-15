@@ -71,7 +71,7 @@ contextbridge version
 ## Quick start
 
 ```powershell
-go install github.com/ukyovfx/Context-Bridge/cmd/contextbridge@v1.2.0
+go install github.com/ukyovfx/Context-Bridge/cmd/contextbridge@v1.2.1
 contextbridge version
 contextbridge setup
 contextbridge registry register C:\path\to\existing-repository
@@ -174,7 +174,7 @@ remaining-credit values.
 
 `registry` stores machine-local project, repository, and workspace identity in `%LOCALAPPDATA%\ContextBridge\registry-v1.json`. `CONTEXTBRIDGE_HOME` overrides that location for tests and controlled environments. Registering an existing repository is machine-local only and does not modify that repository.
 
-`guard` re-probes the selected workspace and compares its canonical path, Git root, git-dir, git-common-dir, normalized primary remote, and branch policy against the registry. Any missing, ambiguous, or changed identity fails closed as `WRONG_WORKSPACE`; there is no force override. This guarantee applies to Context Bridge-mediated mutations and does not physically prevent unrelated software from writing directly.
+`guard` re-probes the selected workspace and compares its workspace ID, canonical and physical path identity, Git root, git-dir, git-common-dir, and normalized primary remote against the registry. Branch and HEAD are mutable Git state, not workspace identity: handoff reports them and plan/apply fingerprints revalidate them, but ordinary branch switching does not require registry repair. Any missing, ambiguous, or changed durable identity fails closed as `WRONG_WORKSPACE`; there is no force override. This guarantee applies to Context Bridge-mediated mutations and does not physically prevent unrelated software from writing directly.
 
 Guarantee boundary: Context Bridge binds logical projects to verified repository/workspace identity, fails closed on mismatches for Context Bridge-mediated operations, and produces reproducible, explainable handoffs and verification context. It does not sandbox agents, guarantee agent compliance, prevent all secret leakage, or replace Git and agent-native security controls.
 
@@ -208,7 +208,7 @@ Manifest V2 never stores local workspace paths and does not use the mutable `CUR
 
 V1.2 has no persistent Task or AgentSession model, managed worktree lifecycle, cleanup or deletion execution, agent launcher, daemon, dashboard/TUI, PR or issue orchestration, Codex internal-state parsing, automatic agent-configuration writes, AI/model/API calls, secret persistence, destructive Git commands, organization support, automatic AI-Knowledge writes, GUI, MCP, vector database, or Obsidian plugin. Explicit `setup --codex-bootstrap` may manage only its marked global Context Bridge block; it does not modify `config.toml` or unrelated content. Obsidian is only a passive Markdown viewer. `adopt`, `upgrade`, and `rebind` remain explicit plan/apply operations; none is automatic.
 
-Hosted CI passed for the reviewed release basis commit. No stable tag or GitHub Release has been published yet; publication remains an explicit release action.
+Hosted CI and release artifacts are verified per release; publication remains an explicit release action.
 
 ## Pilot boundary and post-V1 direction
 

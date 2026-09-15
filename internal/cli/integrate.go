@@ -166,9 +166,7 @@ func buildIntegrationPlan(path, version string) (integrationPlan, []byte, core.W
 		return plan, data, probe, registryValue, err
 	}
 	plan.Registration = registration
-	if registration != "already_registered" {
-		plan.RequiresConfirmation = len(contextProposal.Changes) > 0 || len(data) > 0
-	}
+	plan.RequiresConfirmation = len(contextProposal.Changes) > 0 || len(data) > 0
 	if manifestPlan.Status == "already_adopted" && len(contextProposal.Changes) == 0 && registration == "already_registered" {
 		plan.Status = "already_integrated"
 	}

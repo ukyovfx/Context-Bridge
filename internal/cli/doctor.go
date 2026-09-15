@@ -96,9 +96,6 @@ func runDoctor(args []string, stdout, stderr io.Writer) error {
 			return errors.New("primary remote identity does not match manifest")
 		}
 	}
-	if manifest.SchemaVersion == 2 && (probe.Detached || probe.Branch != manifest.Repository.CanonicalBranch) {
-		return errors.New("workspace branch does not match manifest canonical branch")
-	}
 	report := state.Evaluate(absProject, workspace.CommandRunner{})
 	if manifest.SchemaVersion == 1 && currentStateHashOK && report.ContentIntegrity == "unverified" {
 		report.ContentIntegrity = "ok"
@@ -107,6 +104,9 @@ func runDoctor(args []string, stdout, stderr io.Writer) error {
 	fmt.Fprintf(stdout, "content integrity: %s\n", report.ContentIntegrity)
 	fmt.Fprintf(stdout, "basis validity: %s\n", report.BasisValidity)
 	fmt.Fprintf(stdout, "basis freshness: %s\n", report.BasisFreshness)
+	if manifest.SchemaVersion == 2 && (probe.Detached || probe.Branch != manifest.Repository.CanonicalBranch) {
+		fmt.Fprintf(stdout, "warning: current Git branch differs from manifest canonical branch; workspace identity remains valid\n")
+	}
 	if len(report.Reasons) > 0 {
 		fmt.Fprintf(stdout, "basis evidence: %v\n", report.Reasons)
 	}

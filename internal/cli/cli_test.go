@@ -160,13 +160,12 @@ func TestRegistryRegisterDryRunPerformsZeroMutation(t *testing.T) {
 	if code := Run([]string{"guard", "--project", "existing", "--workspace", repository}, &stdout, &stderr, "test"); code != 0 {
 		t.Fatalf("guard rejected registered workspace: %s", stderr.String())
 	}
-	runTestGit(t, repository, "checkout", "-b", "wrong-branch")
+	runTestGit(t, repository, "checkout", "-b", "legitimate-work")
 	stdout.Reset()
 	stderr.Reset()
-	if code := Run([]string{"guard", "--project", "existing", "--workspace", repository}, &stdout, &stderr, "test"); code == 0 || !strings.Contains(stderr.String(), "BRANCH_MISMATCH") {
-		t.Fatalf("guard accepted wrong branch: %s", stderr.String())
+	if code := Run([]string{"guard", "--project", "existing", "--workspace", repository}, &stdout, &stderr, "test"); code != 0 {
+		t.Fatalf("guard treated a legitimate branch change as workspace identity drift: %s", stderr.String())
 	}
-	runTestGit(t, repository, "checkout", "main")
 	runTestGit(t, repository, "remote", "set-url", "origin", "https://evil.example/ukyovfx/existing.git")
 	stdout.Reset()
 	stderr.Reset()

@@ -456,7 +456,7 @@ func buildRebindPlan(selector, target string) (migrationPlan, core.Registry, cor
 		err := errors.New(reasonRebindAmbiguous)
 		return planForFailure("rebind", selector, err), value, old, root, probe.Fingerprint, err
 	}
-	if probe.PrimaryRemote == nil || !probe.PrimaryRemote.Equal(repository.Identity) || probe.Detached || probe.Branch != repository.CanonicalBranch {
+	if probe.PrimaryRemote == nil || !probe.PrimaryRemote.Equal(repository.Identity) {
 		err := errors.New(reasonRebindIdentityMismatch)
 		return planForFailure("rebind", selector, err), value, old, root, probe.Fingerprint, err
 	}

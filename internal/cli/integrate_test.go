@@ -71,6 +71,51 @@ func TestIntegratePreservesDirtyExistingAgentsAndIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestIntegrateAndHandoffAllowStaleRegisteredBranchWithoutAutoHealing(t *testing.T) {
+	repo, home := newIntegrationRepo(t, "kitsusync")
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"integrate", repo, "--confirm"}, &stdout, &stderr, "test"); code != 0 {
+		t.Fatalf("initial integration failed: %s", stderr.String())
+	}
+	store := registry.Store{Home: home}
+	before, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.Repositories[0].CanonicalBranch != "main" {
+		t.Fatalf("unexpected fixture branch: %#v", before.Repositories[0])
+	}
+	runTestGit(t, repo, "checkout", "-b", "archive/kitsusync-clean/codex/deploy-rollback-transaction")
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"integrate", repo}, &stdout, &stderr, "test"); code != 0 || !strings.Contains(stdout.String(), "already_integrated") {
+		t.Fatalf("integration rejected stale registered branch: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"guard", "--project", "kitsusync", "--workspace", repo}, &stdout, &stderr, "test"); code != 0 {
+		t.Fatalf("Guard rejected stable workspace identity after branch change: %s", stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"doctor", "--project", repo}, &stdout, &stderr, "test"); code != 0 || !strings.Contains(stdout.String(), "workspace identity remains valid") {
+		t.Fatalf("doctor treated mutable branch state as identity drift: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"handoff", "kitsusync", "--task", "inspect current state", "--json"}, &stdout, &stderr, "test"); code != 0 {
+		t.Fatalf("handoff rejected stable workspace identity after branch change: %s", stderr.String())
+	}
+	after, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Repositories[0].CanonicalBranch != before.Repositories[0].CanonicalBranch || after.Workspaces[0].PathKey != before.Workspaces[0].PathKey {
+		t.Fatalf("read-only reconciliation silently healed persistent registry state: before=%#v after=%#v", before, after)
+	}
+}
+
 func TestIntegrateSurfacesContextConflictAndIdentityChange(t *testing.T) {
 	repo, _ := newIntegrationRepo(t, "conflict")
 	if err := os.MkdirAll(filepath.Join(repo, "docs", "agent"), 0o755); err != nil {

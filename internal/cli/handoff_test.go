@@ -121,20 +121,13 @@ func TestHandoffJSONIsDeterministicExceptTimestamp(t *testing.T) {
 	}
 }
 
-func TestHandoffFailsClosedForWrongWorkspaceAndMissingProject(t *testing.T) {
+func TestHandoffAllowsBranchChangeAndFailsClosedForMissingProject(t *testing.T) {
 	fixture := newHandoffFixture(t)
 	t.Setenv("CONTEXTBRIDGE_HOME", fixture.registryHome)
-	runTestGit(t, fixture.repository, "checkout", "-b", "wrong-branch")
+	runTestGit(t, fixture.repository, "checkout", "-b", "legitimate-work")
 	var stdout, stderr bytes.Buffer
-	if code := Run([]string{"handoff", fixture.project.ID, "--task", "must stop", "--json"}, &stdout, &stderr, "test"); code == 0 {
-		t.Fatal("handoff accepted a wrong workspace branch")
-	}
-	var failed handoffResult
-	if err := json.Unmarshal(stdout.Bytes(), &failed); err != nil {
-		t.Fatal(err)
-	}
-	if failed.Status != handoffFailed || failed.Handoff != nil || !hasHandoffReason(failed.Errors, handoffReasonWrongWorkspace) {
-		t.Fatalf("wrong workspace was not fail-closed: %#v", failed)
+	if code := Run([]string{"handoff", fixture.project.ID, "--task", "inspect current state", "--json"}, &stdout, &stderr, "test"); code != 0 {
+		t.Fatalf("handoff treated a legitimate branch change as workspace identity drift: %s", stderr.String())
 	}
 	stdout.Reset()
 	stderr.Reset()

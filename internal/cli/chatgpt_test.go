@@ -48,12 +48,12 @@ func TestChatGPTBootstrapIsDeterministicPortableAndReadOnly(t *testing.T) {
 func TestChatGPTBootstrapReportsGuardFailureAndMissingCanonicalWorkspace(t *testing.T) {
 	fixture := newHandoffFixture(t)
 	t.Setenv("CONTEXTBRIDGE_HOME", fixture.registryHome)
-	runTestGit(t, fixture.repository, "checkout", "-b", "wrong-branch")
+	runTestGit(t, fixture.repository, "remote", "set-url", "origin", "https://github.com/other/wrong.git")
 	var stdout, stderr bytes.Buffer
 	if code := Run([]string{"bootstrap", "chatgpt", "pilot", "--json"}, &stdout, &stderr, "test"); code == 0 || !strings.Contains(stdout.String(), "WRONG_WORKSPACE") {
 		t.Fatalf("Guard failure was not reported: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
-	runTestGit(t, fixture.repository, "checkout", "main")
+	runTestGit(t, fixture.repository, "remote", "set-url", "origin", "https://github.com/ukyovfx/pilot.git")
 	value, err := (registry.Store{Home: fixture.registryHome}).Load()
 	if err != nil {
 		t.Fatal(err)

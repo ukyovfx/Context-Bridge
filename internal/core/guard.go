@@ -31,14 +31,17 @@ type BranchPolicy struct {
 }
 
 type GuardExpected struct {
-	ProjectID          string                      `json:"project_id"`
-	RepositoryID       string                      `json:"repository_id"`
-	WorkspaceID        string                      `json:"workspace_id"`
-	PathKey            string                      `json:"path_key"`
-	GitRootKey         string                      `json:"git_root_key"`
-	GitDirKey          string                      `json:"git_dir_key"`
-	GitCommonDirKey    string                      `json:"git_common_dir_key"`
-	PrimaryRemote      RemoteIdentity              `json:"primary_remote"`
+	ProjectID       string         `json:"project_id"`
+	RepositoryID    string         `json:"repository_id"`
+	WorkspaceID     string         `json:"workspace_id"`
+	PathKey         string         `json:"path_key"`
+	GitRootKey      string         `json:"git_root_key"`
+	GitDirKey       string         `json:"git_dir_key"`
+	GitCommonDirKey string         `json:"git_common_dir_key"`
+	PrimaryRemote   RemoteIdentity `json:"primary_remote"`
+	// BranchPolicy remains in the V1.2 serialized shape for compatibility. Branch
+	// and HEAD are mutable probe state; PlannedFingerprint supplies exact-state
+	// revalidation when a plan is applied.
 	BranchPolicy       BranchPolicy                `json:"branch_policy"`
 	PlannedFingerprint string                      `json:"planned_fingerprint,omitempty"`
 	PhysicalIdentity   WorkspaceFilesystemIdentity `json:"physical_identity,omitempty"`
@@ -90,13 +93,6 @@ func EvaluateGuard(expected GuardExpected, actual GuardActual) GuardDecision {
 	}
 	if actual.Probe.PrimaryRemote == nil || !expected.PrimaryRemote.Equal(*actual.Probe.PrimaryRemote) {
 		reasons = append(reasons, ReasonPrimaryRemoteMismatch)
-	}
-	if actual.Probe.Detached {
-		if !expected.BranchPolicy.AllowDetached {
-			reasons = append(reasons, ReasonBranchMismatch)
-		}
-	} else if expected.BranchPolicy.Branch == "" || actual.Probe.Branch != expected.BranchPolicy.Branch {
-		reasons = append(reasons, ReasonBranchMismatch)
 	}
 	if expected.PlannedFingerprint != "" && !strings.EqualFold(expected.PlannedFingerprint, actual.Probe.Fingerprint) {
 		reasons = append(reasons, ReasonIdentityChangedAfterPlan)

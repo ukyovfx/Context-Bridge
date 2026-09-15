@@ -135,6 +135,7 @@ func TestUpgradeRefusesUnknownNewerManifest(t *testing.T) {
 func TestRebindRequiresConfirmationAndChangesOnlyRegistry(t *testing.T) {
 	fixture := newHandoffFixture(t)
 	oldPath := fixture.repository
+	runTestGit(t, oldPath, "checkout", "-b", "archive/kitsusync-clean/codex/deploy-rollback-transaction")
 	newPath := filepath.Join(filepath.Dir(oldPath), "pilot-moved")
 	if err := os.Rename(oldPath, newPath); err != nil {
 		t.Fatal(err)
@@ -164,6 +165,25 @@ func TestRebindRequiresConfirmationAndChangesOnlyRegistry(t *testing.T) {
 	}
 	if len(value.Workspaces) != 1 || !equivalentTestPath(t, value.Workspaces[0].Path, newPath) || before != directorySnapshot(t, newPath) {
 		t.Fatalf("rebind changed unexpected state: %#v", value.Workspaces)
+	}
+	if value.Repositories[0].CanonicalBranch != "main" {
+		t.Fatalf("rebind silently rewrote mutable branch state: %#v", value.Repositories[0])
+	}
+	afterRebind := directorySnapshot(t, newPath)
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"integrate", newPath, "--json"}, &stdout, &stderr, "test"); code == 0 || !strings.Contains(stdout.String(), reasonConfirmationRequired) || directorySnapshot(t, newPath) != afterRebind {
+		t.Fatalf("unconfirmed integration after reconciliation was not fail-closed: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"integrate", newPath, "--confirm", "--json"}, &stdout, &stderr, "test"); code != 0 || !strings.Contains(stdout.String(), `"status":"applied"`) {
+		t.Fatalf("confirmed integration failed after reconciliation: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"integrate", newPath, "--json"}, &stdout, &stderr, "test"); code != 0 || !strings.Contains(stdout.String(), "already_integrated") {
+		t.Fatalf("integration was not idempotent after reconciliation: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
 }
 

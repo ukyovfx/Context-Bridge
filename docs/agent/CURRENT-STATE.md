@@ -12,6 +12,7 @@ Status: Packaging / Onboarding V1 frozen after completion audit; installer, port
 ## Implemented
 
 - Portable Project and Repository identity plus machine-local Workspace identity
+- Branch and HEAD are fresh mutable Git state rather than durable Workspace identity; Guard stays strict on project, repository, path, Git topology, physical filesystem identity, and remote, while plan/apply fingerprints retain exact-state revalidation
 - Versioned JSON registry with full-document validation, exclusive writer lock, safe replacement, and last-known-valid backup
 - Vendor-neutral HTTPS, SCP-style SSH, and `ssh://` remote normalization
 - Shared read-only Git workspace probe, deterministic Workspace Guard, and bounded output-only discovery with explicit terminal reporting
@@ -50,8 +51,8 @@ Status: Packaging / Onboarding V1 frozen after completion audit; installer, port
 - Migration regression coverage proves adopt of clean/dirty repositories, owned-file conflict, V1-to-V2 upgrade, recoverable backup, repeated no-op, unknown-newer refusal, rebind move, unrelated repository rejection, confirmation, registry-only mutation, and identity-change abort
 - UX/diagnostics regression coverage proves concise human output, warning severity/action mapping, warning deduplication, absent Claude/Cursor configuration reporting, and inaccessible-Git versus non-Git migration probe classification
 - Packaged binary success-path smoke timing was measured in a trusted temporary fixture: version 20.6 ms median, guard 674.3 ms, handoff 1316.1 ms, doctor --agent codex 2183.7 ms, and instructions --explain --agent codex 1122.7 ms; five runs each, all exit 0
-- The prior `v1.2.0-rc.1` release-candidate notes remain historical; no stable tag or GitHub release has been created
-- Unit and integration tests cover wrong path/Git root/git-dir/common-dir/remote/branch, linked worktrees, independent clones, detached HEAD, local-only unique evidence, and identity change between plan and apply
+- The prior `v1.2.0-rc.1` release-candidate notes remain historical; v1.2.1 release scope is recorded in `docs/releases/v1.2.1.md`
+- Unit and integration tests cover wrong path/Git root/git-dir/common-dir/remote, legitimate branch changes, linked worktrees, independent clones, detached HEAD, local-only unique evidence, and identity change between plan and apply
 - Knowledge Write-back regression coverage proves NONE zero-byte behavior, active and durable routing, deterministic JSON, malformed proposal refusal, secret-like content refusal, identity-change abort, accepted-state downgrade and successful promotion, no automatic Git mutation, and read-only knowledge diagnostics
 - Packaging / Onboarding regression coverage proves setup dry-run zero mutation, explicit confirmation, idempotency, temporary Codex HOME isolation, preservation of existing global instructions, managed-block conflict refusal, stale-plan refusal, Codex precedence ordering, and profile/router diagnostics
 - New-project regression coverage proves configured active-root resolution, exact target paths, dry-run zero mutation, local registration, existing-target refusal, invalid-profile refusal, and explicit GitHub planning
@@ -67,6 +68,6 @@ Status: Packaging / Onboarding V1 frozen after completion audit; installer, port
 
 ## Remaining risk
 
-- No stable tag or GitHub Release has been published yet; release publication remains an explicit approval step.
+- Release publication remains an explicit, artifact-integrity-gated step.
 - The installer is unsigned because no signing identity is configured.
 - V1.1 guards Context Bridge-mediated mutations; external tools can still bypass Context Bridge and write directly.
