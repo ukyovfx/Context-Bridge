@@ -225,7 +225,7 @@ func equivalentProbePath(t *testing.T, left, right string) bool {
 
 func gitShortPath(t *testing.T, path string) string {
 	t.Helper()
-	cmd := exec.Command("cmd", "/c", "for %I in (\""+path+"\") do @echo %~sI")
+	cmd := exec.Command("cmd.exe", "/d", "/c", "for %I in ("+path+") do @echo %~sI")
 	data, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("resolve short path %q: %v", path, err)
