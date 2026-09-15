@@ -100,6 +100,9 @@ try {
     if (($doctorOutput -join "`n") -notmatch 'CURRENT-STATE has uncommitted content changes') { throw 'doctor did not classify changed CURRENT-STATE' }
 
     Write-Host 'local E2E passed: zero-mutation dry-runs, Manifest V2 hashes, registry, guard, discovery, and stale CURRENT-STATE detection'
+    # The stale-doctor command intentionally returns 1; do not leak that
+    # expected negative-test result as the successful script exit code.
+    $global:LASTEXITCODE = 0
 }
 finally {
     Remove-Item Env:CONTEXTBRIDGE_HOME -ErrorAction SilentlyContinue
