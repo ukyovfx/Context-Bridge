@@ -11,6 +11,7 @@ import (
 
 	"github.com/ukyovfx/Context-Bridge/internal/core"
 	"github.com/ukyovfx/Context-Bridge/internal/idgen"
+	"github.com/ukyovfx/Context-Bridge/internal/safety"
 	"github.com/ukyovfx/Context-Bridge/internal/workspace"
 )
 
@@ -112,8 +113,8 @@ func runRegistryRegister(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if probe.Topology == core.TopologyNonGit || probe.PrimaryRemote == nil || probe.Branch == "" || probe.Detached || probe.PathKey != probe.GitRootKey {
-		return errors.New("registration requires a branch-attached Git workspace with an unambiguous origin")
+	if err := validateRegistrationProbe(probe); err != nil {
+		return err
 	}
 	store, err := registryStore()
 	if err != nil {
@@ -188,5 +189,18 @@ func runRegistryRegister(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	fmt.Fprintf(stdout, "registered %s as %s\n", probe.CanonicalPath, role)
+	return nil
+}
+
+func validateRegistrationProbe(probe core.WorkspaceProbe) error {
+	if len(probe.EvidenceErrors) > 0 {
+		return fmt.Errorf("registration requires complete workspace probe evidence: %s", strings.Join(probe.EvidenceErrors, ", "))
+	}
+	if safety.FilesystemIdentitySupported() && !probe.PhysicalIdentity.Complete() {
+		return errors.New("registration requires complete physical filesystem identity")
+	}
+	if probe.Topology == core.TopologyNonGit || probe.PrimaryRemote == nil || probe.Branch == "" || probe.Detached || probe.PathKey != probe.GitRootKey {
+		return errors.New("registration requires a branch-attached Git workspace with an unambiguous origin")
+	}
 	return nil
 }

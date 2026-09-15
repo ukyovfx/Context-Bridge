@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ukyovfx/Context-Bridge/internal/core"
+	"github.com/ukyovfx/Context-Bridge/internal/policy"
 	"github.com/ukyovfx/Context-Bridge/internal/state"
 	"github.com/ukyovfx/Context-Bridge/internal/workspace"
 )
@@ -70,27 +71,30 @@ type agentHints struct {
 }
 
 type handoffDocument struct {
-	SchemaVersion      int                  `json:"schema_version"`
-	Agent              string               `json:"agent"`
-	ProjectID          string               `json:"project_id"`
-	ProjectName        string               `json:"project_name"`
-	RepositoryID       string               `json:"repository_id"`
-	WorkspaceID        string               `json:"workspace_id"`
-	WorkspacePath      string               `json:"workspace_path"`
-	GitRoot            string               `json:"git_root"`
-	Branch             string               `json:"branch,omitempty"`
-	Detached           bool                 `json:"detached"`
-	Head               string               `json:"head,omitempty"`
-	BaseCommit         string               `json:"base_commit"`
-	RepositoryIdentity core.RemoteIdentity  `json:"repository_identity"`
-	ContextEntrypoints []string             `json:"context_entrypoints,omitempty"`
-	AcceptedState      state.Report         `json:"accepted_state"`
-	TaskIntent         string               `json:"task_intent"`
-	Verification       verificationContract `json:"verification"`
-	Guard              handoffGuard         `json:"guard"`
-	AgentDiagnostics   agentDiagnostics     `json:"agent_diagnostics"`
-	AgentHints         agentHints           `json:"agent_hints"`
-	GeneratedAt        string               `json:"generated_at"`
+	SchemaVersion      int                   `json:"schema_version"`
+	Agent              string                `json:"agent"`
+	ProjectID          string                `json:"project_id"`
+	ProjectName        string                `json:"project_name"`
+	RepositoryID       string                `json:"repository_id"`
+	WorkspaceID        string                `json:"workspace_id"`
+	WorkspacePath      string                `json:"workspace_path"`
+	GitRoot            string                `json:"git_root"`
+	Branch             string                `json:"branch,omitempty"`
+	Detached           bool                  `json:"detached"`
+	Head               string                `json:"head,omitempty"`
+	BaseCommit         string                `json:"base_commit"`
+	RepositoryIdentity core.RemoteIdentity   `json:"repository_identity"`
+	ContextEntrypoints []string              `json:"context_entrypoints,omitempty"`
+	AcceptedState      state.Report          `json:"accepted_state"`
+	TaskIntent         string                `json:"task_intent"`
+	TaskIntentType     policy.TaskIntent     `json:"task_intent_type"`
+	Verification       verificationContract  `json:"verification"`
+	Guard              handoffGuard          `json:"guard"`
+	AgentDiagnostics   agentDiagnostics      `json:"agent_diagnostics"`
+	AgentHints         agentHints            `json:"agent_hints"`
+	ExecutionPrompt    string                `json:"execution_prompt"`
+	Recommendation     policy.Recommendation `json:"model_recommendation"`
+	GeneratedAt        string                `json:"generated_at"`
 }
 
 type handoffResult struct {
@@ -119,6 +123,7 @@ func runHandoff(args []string, stdout, stderr io.Writer) error {
 	flags.SetOutput(stderr)
 	task := flags.String("task", "", "task intent")
 	agent := flags.String("agent", "codex", "codex, claude, or cursor")
+	creditState := flags.String("credit-state", string(policy.CreditUnknown), "optional advisory credit state: abundant, normal, constrained, critical, or unknown")
 	jsonOutput := flags.Bool("json", false, "emit JSON")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -131,6 +136,9 @@ func runHandoff(args []string, stdout, stderr io.Writer) error {
 	}
 	if *agent != "codex" && *agent != "claude" && *agent != "cursor" {
 		return errors.New("agent must be codex, claude, or cursor")
+	}
+	if !policy.ValidCreditState(policy.CreditState(*creditState)) {
+		return errors.New("credit-state must be abundant, normal, constrained, critical, or unknown")
 	}
 
 	result := handoffResult{Status: handoffFailed, Project: projectSelector, TaskIntent: *task, Warnings: []handoffIssue{}, Errors: []handoffIssue{}}
@@ -151,7 +159,12 @@ func runHandoff(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		var resolution handoffResolutionError
 		if errors.As(err, &resolution) {
-			result.Errors = append(result.Errors, handoffIssue{Reason: resolution.Reason})
+			issue := handoffIssue{Reason: resolution.Reason}
+			if resolution.Reason == handoffReasonProjectNotFound {
+				issue.Message = "handoff requires a registered project ID, alias, or registered workspace path."
+				issue.Action = "run contextbridge registry register <path> first, then retry handoff."
+			}
+			result.Errors = append(result.Errors, issue)
 			if !*jsonOutput && len(resolution.Matches) > 0 {
 				for _, match := range resolution.Matches {
 					fmt.Fprintf(stdout, "match: %s\t%s\n", match.ID, match.DisplayName)
@@ -230,7 +243,16 @@ func runHandoff(args []string, stdout, stderr io.Writer) error {
 	if len(probe.EvidenceErrors) > 0 {
 		result.Warnings = append(result.Warnings, handoffIssue{Reason: handoffReasonVerificationUnverified, Severity: "warning", Message: "Some Git evidence could not be verified.", Action: "review the probe evidence before relying on this handoff."})
 	}
-	document := makeHandoffDocument(project, repository, registered, probe, verification, baseCommit, *task, *agent, entrypoints, guard, diagnosticResult.Diagnostics)
+	profile := inferTaskProfile(*task, verification, entrypoints, policy.CreditState(*creditState))
+	recommendation := policy.Recommend(profile)
+	prompt := policy.BuildExecutionPrompt(policy.PromptInput{
+		Intent:                  profile.Intent,
+		Goal:                    *task,
+		Context:                 promptContext(entrypoints, verification),
+		Verification:            verification.RequiredCommands,
+		AcceptedStateUnverified: acceptedStateUnverified(verification.CurrentState),
+	})
+	document := makeHandoffDocument(project, repository, registered, probe, verification, baseCommit, *task, profile.Intent, *agent, entrypoints, guard, diagnosticResult.Diagnostics, prompt, recommendation)
 	result.Handoff = &document
 	result.Status = handoffReady
 	if len(result.Warnings) > 0 {
@@ -252,7 +274,27 @@ func resolveHandoffProject(value core.Registry, selector string) (core.ProjectRe
 	case 1:
 		return matches[0], nil
 	case 0:
-		return core.ProjectRecord{}, handoffResolutionError{Reason: handoffReasonProjectNotFound}
+		canonical, err := workspace.CanonicalPath(selector)
+		if err == nil {
+			for _, registered := range value.Workspaces {
+				if registered.Role != core.RoleCanonical || registered.PathKey != workspace.PathKey(canonical) {
+					continue
+				}
+				project, projectErr := projectForRepository(value, registered.RepositoryID)
+				if projectErr == nil {
+					matches = append(matches, project)
+				}
+			}
+			sort.Slice(matches, func(i, j int) bool { return matches[i].ID < matches[j].ID })
+		}
+		switch len(matches) {
+		case 1:
+			return matches[0], nil
+		case 0:
+			return core.ProjectRecord{}, handoffResolutionError{Reason: handoffReasonProjectNotFound}
+		default:
+			return core.ProjectRecord{}, handoffResolutionError{Reason: handoffReasonProjectAmbiguous, Matches: matches}
+		}
 	default:
 		return core.ProjectRecord{}, handoffResolutionError{Reason: handoffReasonProjectAmbiguous, Matches: matches}
 	}
@@ -334,15 +376,54 @@ func verificationCommands(contents string) []string {
 	return commands
 }
 
-func makeHandoffDocument(project core.ProjectRecord, repository core.RepositoryRecord, registered core.WorkspaceRecord, probe core.WorkspaceProbe, verification verificationContract, baseCommit, task, agent string, entrypoints []string, guard handoffGuard, diagnostics agentDiagnostics) handoffDocument {
+func makeHandoffDocument(project core.ProjectRecord, repository core.RepositoryRecord, registered core.WorkspaceRecord, probe core.WorkspaceProbe, verification verificationContract, baseCommit, task string, taskType policy.TaskIntent, agent string, entrypoints []string, guard handoffGuard, diagnostics agentDiagnostics, prompt string, recommendation policy.Recommendation) handoffDocument {
 	return handoffDocument{
 		SchemaVersion: 1, Agent: agent, ProjectID: project.ID, ProjectName: project.DisplayName,
 		RepositoryID: repository.ID, WorkspaceID: registered.ID, WorkspacePath: probe.CanonicalPath,
 		GitRoot: probe.GitRoot, Branch: probe.Branch, Detached: probe.Detached, Head: probe.Head,
 		BaseCommit: baseCommit, RepositoryIdentity: repository.Identity, ContextEntrypoints: entrypoints,
-		AcceptedState: verification.CurrentState, TaskIntent: task, Verification: verification, Guard: guard, AgentDiagnostics: diagnostics,
-		AgentHints:  makeAgentHints(agent, probe.CanonicalPath, entrypoints, verification.RequiredCommands),
+		AcceptedState: verification.CurrentState, TaskIntent: task, TaskIntentType: taskType, Verification: verification, Guard: guard, AgentDiagnostics: diagnostics,
+		AgentHints: makeAgentHints(agent, probe.CanonicalPath, entrypoints, verification.RequiredCommands), ExecutionPrompt: prompt, Recommendation: recommendation,
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339Nano),
+	}
+}
+
+func acceptedStateUnverified(report state.Report) bool {
+	return report.ContentIntegrity == "unverified" || report.ContentIntegrity == "modified" || report.BasisValidity == "unverified" || report.BasisFreshness == "unverified" || report.BasisFreshness == "stale"
+}
+
+func promptContext(entrypoints []string, verification verificationContract) []string {
+	context := []string{}
+	if len(entrypoints) > 0 {
+		context = append(context, "Repository context entrypoints: "+strings.Join(entrypoints, ", "))
+	}
+	if len(verification.Source) > 0 {
+		context = append(context, "Verification contract source: "+strings.Join(verification.Source, ", "))
+	}
+	return context
+}
+
+func inferTaskProfile(task string, verification verificationContract, entrypoints []string, creditState policy.CreditState) policy.TaskProfile {
+	lower := strings.ToLower(task)
+	contains := func(values ...string) bool {
+		for _, value := range values {
+			if strings.Contains(lower, value) {
+				return true
+			}
+		}
+		return false
+	}
+	return policy.TaskProfile{
+		Intent:                policy.ClassifyTask(task),
+		Ambiguous:             contains("ambiguous", "unclear", "choose between", "decide"),
+		ArchitectureComplex:   contains("architecture", "cross-cutting", "redesign", "refactor"),
+		SecuritySensitive:     contains("security", "authentication", "authorization", "secret", "credential", "permission"),
+		DestructiveRisk:       contains("delete", "reset", "rewrite history", "migration", "release", "signing"),
+		VerificationDifficult: contains("audit", "race", "correctness", "hardening"),
+		CrossCutting:          contains("multiple packages", "end-to-end", "integration"),
+		OnePassCorrectness:    contains("one pass", "must be correct"),
+		IncompleteContext:     len(entrypoints) == 0 || verification.Status != "RESOLVED",
+		CreditState:           creditState,
 	}
 }
 
@@ -372,6 +453,7 @@ func emitHandoffResult(stdout io.Writer, result handoffResult, jsonOutput bool) 
 	if result.Handoff != nil {
 		fmt.Fprintf(stdout, "Project: %s\nWorkspace: verified\nGuard: %s\nAgent: %s\nVerification: %s\n", result.Handoff.ProjectName, passLabel(result.Handoff.Guard.Allowed), result.Handoff.Agent, result.Handoff.Verification.Status)
 		fmt.Fprintf(stdout, "Accepted state: %s\n", acceptedStateLabel(result.Handoff.AcceptedState))
+		fmt.Fprintf(stdout, "\n%s\n\nCodex execution prompt:\n%s\n", policy.FormatRecommendation(result.Handoff.Recommendation), result.Handoff.ExecutionPrompt)
 		fmt.Fprintf(stdout, "Warnings: %d\n", len(result.Warnings))
 	}
 	for _, warning := range result.Warnings {

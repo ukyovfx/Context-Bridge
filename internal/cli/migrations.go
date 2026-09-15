@@ -15,6 +15,7 @@ import (
 	"github.com/ukyovfx/Context-Bridge/internal/core"
 	"github.com/ukyovfx/Context-Bridge/internal/idgen"
 	"github.com/ukyovfx/Context-Bridge/internal/registry"
+	"github.com/ukyovfx/Context-Bridge/internal/safety"
 	"github.com/ukyovfx/Context-Bridge/internal/workspace"
 )
 
@@ -138,6 +139,9 @@ func runAdopt(args []string, stdout, stderr io.Writer, version string) error {
 }
 
 func runUpgrade(args []string, stdout, stderr io.Writer, version string) error {
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		return runSelfUpgrade(args, stdout, stderr, version)
+	}
 	path, remaining, err := takePath(args, "upgrade")
 	if err != nil {
 		return err
@@ -199,6 +203,35 @@ func runUpgrade(args []string, stdout, stderr io.Writer, version string) error {
 	}
 	plan.Status = "applied"
 	emitMigrationPlan(stdout, plan, *jsonOutput)
+	return nil
+}
+
+// runSelfUpgrade intentionally has no implicit network or binary replacement.
+// A release source must be explicitly configured in a later version before a
+// self-update can mutate the running installation.
+func runSelfUpgrade(args []string, stdout, stderr io.Writer, version string) error {
+	flags := flag.NewFlagSet("upgrade", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	check := flags.Bool("check", false, "check self-upgrade readiness without modifying anything")
+	dryRun := flags.Bool("dry-run", false, "preview self-upgrade without modifying anything")
+	confirm := flags.Bool("confirm", false, "confirm a configured self-upgrade")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if flags.NArg() != 0 {
+		return errors.New("upgrade accepts either <path> for manifest migration or no path for self-upgrade")
+	}
+	if *confirm {
+		return errors.New("self-upgrade is not configured; install a reviewed release explicitly")
+	}
+	if !*check && !*dryRun {
+		*check = true
+	}
+	mode := "check"
+	if *dryRun {
+		mode = "dry-run"
+	}
+	fmt.Fprintf(stdout, "self-upgrade %s: current version %s; no update source configured; zero mutations performed\n", mode, version)
 	return nil
 }
 
@@ -444,6 +477,9 @@ func probeMigrationTarget(path string) (string, core.WorkspaceProbe, error) {
 			return "", core.WorkspaceProbe{}, errors.New(string(status))
 		}
 		return "", core.WorkspaceProbe{}, errors.New(string(status))
+	}
+	if safety.FilesystemIdentitySupported() && !probe.PhysicalIdentity.Complete() {
+		return "", core.WorkspaceProbe{}, errors.New("FILESYSTEM_IDENTITY_UNAVAILABLE")
 	}
 	return probe.GitRoot, probe, nil
 }

@@ -16,7 +16,14 @@ import (
 	"github.com/ukyovfx/Context-Bridge/internal/workspace"
 )
 
+var initGitHubIdentity = readGitHubIdentity
+var initRepositoryAbsent = requireRepositoryAbsent
+
 func runInit(args []string, stdout, stderr io.Writer, version string) error {
+	return runInitWithRegistration(args, stdout, stderr, version, false)
+}
+
+func runInitWithRegistration(args []string, stdout, stderr io.Writer, version string, registerLocalOnly bool) error {
 	project, remaining, err := takeProject(args)
 	if err != nil {
 		return err
@@ -47,7 +54,7 @@ func runInit(args []string, stdout, stderr io.Writer, version string) error {
 	}
 	var remoteIdentity *core.RemoteIdentity
 	if !*localOnly {
-		identity, identityErr := readGitHubIdentity()
+		identity, identityErr := initGitHubIdentity()
 		if identityErr != nil {
 			return identityErr
 		}
@@ -57,7 +64,7 @@ func runInit(args []string, stdout, stderr io.Writer, version string) error {
 		if !strings.EqualFold(*owner, identity.Login) {
 			return errors.New("safety abort: owner must match the authenticated personal GitHub account; organizations are not supported")
 		}
-		if err := requireRepositoryAbsent(*owner, project); err != nil {
+		if err := initRepositoryAbsent(*owner, project); err != nil {
 			return err
 		}
 		normalized, err := core.NormalizeRemote("https://github.com/" + *owner + "/" + project + ".git")
@@ -106,7 +113,7 @@ func runInit(args []string, stdout, stderr io.Writer, version string) error {
 	if err := applier.Apply(plan); err != nil {
 		return err
 	}
-	if !*localOnly {
+	if !*localOnly || registerLocalOnly {
 		probe, err := (workspace.Prober{}).Probe(plan.Target())
 		if err != nil {
 			return fmt.Errorf("project created but workspace registration probe failed: %w", err)
@@ -124,7 +131,13 @@ func runInit(args []string, stdout, stderr io.Writer, version string) error {
 			return err
 		}
 		registryValue.Projects = append(registryValue.Projects, core.ProjectRecord{ID: projectID, DisplayName: project})
-		registryValue.Repositories = append(registryValue.Repositories, core.RepositoryRecord{ID: repositoryID, ProjectID: projectID, Identity: *remoteIdentity, PrimaryRemoteName: "origin", CanonicalBranch: "main"})
+		identity := core.RemoteIdentity{Host: "local.contextbridge", Path: project}
+		primaryRemoteName := "local"
+		if !*localOnly {
+			identity = *remoteIdentity
+			primaryRemoteName = "origin"
+		}
+		registryValue.Repositories = append(registryValue.Repositories, core.RepositoryRecord{ID: repositoryID, ProjectID: projectID, Identity: identity, PrimaryRemoteName: primaryRemoteName, CanonicalBranch: "main"})
 		registryValue.Workspaces = append(registryValue.Workspaces, workspaceRecord(workspaceID, repositoryID, core.RoleCanonical, probe))
 		if err := store.Save(registryValue); err != nil {
 			return fmt.Errorf("project created but registry write failed: %w", err)
@@ -158,5 +171,5 @@ func inspectInit(root, project string) (core.InitSnapshot, error) {
 }
 
 func workspaceRecord(id, repositoryID string, role core.RegistryRole, probe core.WorkspaceProbe) core.WorkspaceRecord {
-	return core.WorkspaceRecord{ID: id, RepositoryID: repositoryID, Path: probe.CanonicalPath, PathKey: probe.PathKey, GitRoot: probe.GitRoot, GitRootKey: probe.GitRootKey, GitDir: probe.GitDir, GitDirKey: probe.GitDirKey, GitCommonDir: probe.GitCommonDir, GitCommonDirKey: probe.GitCommonDirKey, Topology: probe.Topology, Role: role}
+	return core.WorkspaceRecord{ID: id, RepositoryID: repositoryID, Path: probe.CanonicalPath, PathKey: probe.PathKey, GitRoot: probe.GitRoot, GitRootKey: probe.GitRootKey, GitDir: probe.GitDir, GitDirKey: probe.GitDirKey, GitCommonDir: probe.GitCommonDir, GitCommonDirKey: probe.GitCommonDirKey, Topology: probe.Topology, Role: role, PhysicalIdentity: probe.PhysicalIdentity}
 }

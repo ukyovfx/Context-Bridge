@@ -118,6 +118,7 @@ func runDoctor(args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 	}
+	emitLocalProfileDiagnostics(stdout, manifest)
 	if *agent != "" {
 		diagnostics := diagnoseAgent(absProject, *agent)
 		emitInstructionResult(stdout, diagnostics, false)

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 )
 
 const productLine = "Context Bridge — GPT ↔ Codex Development Context Bridge"
@@ -19,8 +20,24 @@ func Run(args []string, stdout, stderr io.Writer, version string) int {
 		err = runSetup(args[1:], stdout, stderr)
 	case "init":
 		err = runInit(args[1:], stdout, stderr, version)
+	case "new":
+		err = runNew(args[1:], stdout, stderr, version)
+	case "integrate":
+		err = runIntegrate(args[1:], stdout, stderr, version)
+	case "bootstrap":
+		err = runBootstrap(args[1:], stdout, stderr)
 	case "doctor":
-		err = runDoctor(args[1:], stdout, stderr)
+		if len(args) >= 2 && !strings.HasPrefix(args[1], "-") {
+			err = runContextDoctor(args[1:], stdout, stderr)
+		} else {
+			err = runDoctor(args[1:], stdout, stderr)
+		}
+	case "inspect":
+		err = runInspect(args[1:], stdout, stderr)
+	case "preview":
+		err = runPreview(args[1:], stdout, stderr)
+	case "apply":
+		err = runContextApply(args[1:], stdout, stderr)
 	case "registry":
 		err = runRegistry(args[1:], stdout, stderr)
 	case "guard":
@@ -68,18 +85,25 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, productLine)
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Usage:")
-	fmt.Fprintln(w, "  contextbridge setup [--dry-run]")
+	fmt.Fprintln(w, "  contextbridge setup [--workspace-root PATH] [--codex-bootstrap] [--confirm] [--dry-run]")
 	fmt.Fprintln(w, "  contextbridge init <project> [--root PATH] [--owner USER] [--profile core|openai] [--local-only] [--dry-run]")
+	fmt.Fprintln(w, "  contextbridge new <project> [--profile core|openai] [--github] [--owner USER] [--dry-run]")
+	fmt.Fprintln(w, "  contextbridge integrate <path> [--confirm] [--dry-run] [--json]")
+	fmt.Fprintln(w, "  contextbridge bootstrap chatgpt <project> [--json]")
 	fmt.Fprintln(w, "  contextbridge doctor [--project PATH]")
+	fmt.Fprintln(w, "  contextbridge doctor [PATH] [--json]")
+	fmt.Fprintln(w, "  contextbridge inspect [PATH] [--json]")
+	fmt.Fprintln(w, "  contextbridge preview [PATH] [--json]")
+	fmt.Fprintln(w, "  contextbridge apply <PATH> --confirm [--json]")
 	fmt.Fprintln(w, "  contextbridge registry list")
 	fmt.Fprintln(w, "  contextbridge registry show <project>")
 	fmt.Fprintln(w, "  contextbridge registry register <path> [--role canonical|alternate] [--dry-run]")
 	fmt.Fprintln(w, "  contextbridge guard --project <id-or-alias> [--workspace <id-or-path>]")
 	fmt.Fprintln(w, "  contextbridge discover --root <path> [--json]")
-	fmt.Fprintln(w, "  contextbridge handoff <project> --task \"<intent>\" [--agent codex|claude|cursor] [--json]")
+	fmt.Fprintln(w, "  contextbridge handoff <project> --task \"<intent>\" [--agent codex|claude|cursor] [--credit-state STATE] [--json]")
 	fmt.Fprintln(w, "  contextbridge instructions --explain [--project PATH] [--agent codex|claude|cursor] [--json]")
 	fmt.Fprintln(w, "  contextbridge adopt <path> [--dry-run] [--confirm] [--json]")
-	fmt.Fprintln(w, "  contextbridge upgrade <path> [--dry-run] [--confirm] [--json]")
+	fmt.Fprintln(w, "  contextbridge upgrade [--check|--dry-run] | <path> [--dry-run] [--confirm] [--json]")
 	fmt.Fprintln(w, "  contextbridge rebind <project> --workspace <path> [--dry-run] [--confirm] [--json]")
 	fmt.Fprintln(w, "  contextbridge writeback plan <project> [--class none|active|durable_record|accepted_state] [--summary TEXT] [--json]")
 	fmt.Fprintln(w, "  contextbridge writeback apply --proposal PATH [--json]")

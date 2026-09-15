@@ -31,18 +31,19 @@ type RepositoryRecord struct {
 }
 
 type WorkspaceRecord struct {
-	ID              string            `json:"id"`
-	RepositoryID    string            `json:"repository_id"`
-	Path            string            `json:"path"`
-	PathKey         string            `json:"path_key"`
-	GitRoot         string            `json:"git_root"`
-	GitRootKey      string            `json:"git_root_key"`
-	GitDir          string            `json:"git_dir"`
-	GitDirKey       string            `json:"git_dir_key"`
-	GitCommonDir    string            `json:"git_common_dir"`
-	GitCommonDirKey string            `json:"git_common_dir_key"`
-	Topology        WorkspaceTopology `json:"topology"`
-	Role            RegistryRole      `json:"role"`
+	ID               string                      `json:"id"`
+	RepositoryID     string                      `json:"repository_id"`
+	Path             string                      `json:"path"`
+	PathKey          string                      `json:"path_key"`
+	GitRoot          string                      `json:"git_root"`
+	GitRootKey       string                      `json:"git_root_key"`
+	GitDir           string                      `json:"git_dir"`
+	GitDirKey        string                      `json:"git_dir_key"`
+	GitCommonDir     string                      `json:"git_common_dir"`
+	GitCommonDirKey  string                      `json:"git_common_dir_key"`
+	Topology         WorkspaceTopology           `json:"topology"`
+	Role             RegistryRole                `json:"role"`
+	PhysicalIdentity WorkspaceFilesystemIdentity `json:"physical_identity,omitempty"`
 }
 
 func NewRegistry() Registry {
@@ -117,6 +118,9 @@ func (r Registry) Validate() error {
 		}
 		if workspace.Topology != TopologyMainWorktree && workspace.Topology != TopologyLinkedWorktree && workspace.Topology != TopologyIndependentClone {
 			return errors.New("workspace has an invalid Git topology")
+		}
+		if !workspace.PhysicalIdentity.ValidOrEmpty() {
+			return errors.New("workspace has invalid physical filesystem identity")
 		}
 		if workspace.Role == RoleCanonical {
 			if canonicalRepositories[workspace.RepositoryID] {

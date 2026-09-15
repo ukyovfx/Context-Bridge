@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ukyovfx/Context-Bridge/internal/apply"
@@ -46,5 +47,62 @@ func TestIdentityChangeBetweenPlanAndApplyPreventsMutation(t *testing.T) {
 	}
 	if _, statErr := os.Lstat(target); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("apply mutated target after identity change: %v", statErr)
+	}
+}
+
+func TestRegistrationRejectsIncompleteProbeEvidence(t *testing.T) {
+	remote := core.RemoteIdentity{Host: "github.com", Path: "example/repo"}
+	err := validateRegistrationProbe(core.WorkspaceProbe{
+		Topology: core.TopologyMainWorktree, PathKey: "c:/repo", GitRootKey: "c:/repo",
+		Branch: "main", PrimaryRemote: &remote, EvidenceErrors: []string{"status_unavailable"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "complete workspace probe evidence") {
+		t.Fatalf("incomplete registration probe was accepted: %v", err)
+	}
+}
+
+type incompleteProbeRunner struct{}
+
+func (incompleteProbeRunner) Output(directory string, args ...string) ([]byte, error) {
+	command := strings.Join(args, " ")
+	switch {
+	case command == "rev-parse --show-toplevel":
+		return []byte(directory + "\n"), nil
+	case command == "rev-parse --absolute-git-dir", command == "rev-parse --path-format=absolute --git-common-dir":
+		return []byte(filepath.Join(directory, ".git") + "\n"), nil
+	case command == "rev-parse --verify HEAD":
+		return []byte("0123456789012345678901234567890123456789\n"), nil
+	case command == "symbolic-ref --quiet --short HEAD":
+		return []byte("main\n"), nil
+	case command == "remote":
+		return []byte("origin\n"), nil
+	case strings.HasPrefix(command, "remote get-url"):
+		return []byte("https://github.com/example/repo.git\n"), nil
+	case strings.HasPrefix(command, "status"):
+		return nil, errors.New("synthetic status failure")
+	case strings.HasPrefix(command, "rev-list"), strings.HasPrefix(command, "stash"), strings.HasPrefix(command, "for-each-ref"), strings.HasPrefix(command, "worktree"):
+		return []byte("0\n"), nil
+	default:
+		return nil, errors.New("unexpected probe command")
+	}
+}
+
+func TestLiveGuardVerifierRejectsIncompleteProbeEvidence(t *testing.T) {
+	path := t.TempDir()
+	if err := os.Mkdir(filepath.Join(path, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	remote := core.RemoteIdentity{Host: "github.com", Path: "example/repo"}
+	prober := workspace.Prober{Runner: incompleteProbeRunner{}}
+	probe, err := prober.Probe(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	project := core.ProjectRecord{ID: "prj_11111111-1111-4111-8111-111111111111", DisplayName: "repo"}
+	repository := core.RepositoryRecord{ID: "repo_22222222-2222-4222-8222-222222222222", ProjectID: project.ID, Identity: remote, PrimaryRemoteName: "origin", CanonicalBranch: "main"}
+	workspaceRecord := core.WorkspaceRecord{ID: "ws_33333333-3333-4333-8333-333333333333", RepositoryID: repository.ID, Path: probe.CanonicalPath, PathKey: probe.PathKey, GitRoot: probe.GitRoot, GitRootKey: probe.GitRootKey, GitDir: probe.GitDir, GitDirKey: probe.GitDirKey, GitCommonDir: probe.GitCommonDir, GitCommonDirKey: probe.GitCommonDirKey, Topology: probe.Topology, Role: core.RoleCanonical}
+	verifier := liveGuardVerifier{Project: project, Repository: repository, Workspace: workspaceRecord, Path: path, Prober: prober}
+	if err := verifier.Verify(guardExpected(project, repository, workspaceRecord, probe.Fingerprint)); !core.IsWrongWorkspace(err) {
+		t.Fatalf("incomplete live probe was accepted: %v", err)
 	}
 }

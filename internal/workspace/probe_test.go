@@ -1,12 +1,15 @@
 package workspace
 
 import (
+	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ukyovfx/Context-Bridge/internal/core"
 	"github.com/ukyovfx/Context-Bridge/internal/safety"
@@ -81,6 +84,18 @@ func TestProbeClassifiesStatusTopologyAndPrimaryRemote(t *testing.T) {
 	}
 }
 
+func TestProbeNormalRepositoryHasCompleteEvidence(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	createRepository(t, repo, "https://github.com/example/repo.git")
+	probe, err := (Prober{}).Probe(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(probe.EvidenceErrors) != 0 {
+		t.Fatalf("normal repository produced incomplete evidence: %v; probe=%#v", probe.EvidenceErrors, probe)
+	}
+}
+
 func TestProbeDetachedAndLocalUniqueWork(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	createRepository(t, repo, "https://github.com/ukyovfx/Context-Bridge.git")
@@ -119,6 +134,89 @@ func TestProbeWithStatusDistinguishesNonGitAndInaccessibleGit(t *testing.T) {
 	if err != nil || status != ProbeGitRepositoryInaccessible {
 		t.Fatalf("Git directory classification = %s, %v", status, err)
 	}
+}
+
+func TestCommandRunnerNeutralizesGitRepositorySelectors(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "target")
+	other := filepath.Join(root, "other")
+	createRepository(t, target, "https://github.com/example/target.git")
+	createRepository(t, other, "https://github.com/example/other.git")
+	selectors := map[string]string{
+		"GIT_DIR":        filepath.Join(other, ".git"),
+		"GIT_WORK_TREE":  other,
+		"GIT_INDEX_FILE": filepath.Join(other, ".git", "index"),
+	}
+	for name, value := range selectors {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv(name, value)
+			probe, err := (Prober{}).Probe(target)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if probe.GitRootKey != PathKey(target) || probe.PrimaryRemote == nil || probe.PrimaryRemote.Path != "example/target" {
+				t.Fatalf("%s redirected probe: %#v", name, probe)
+			}
+		})
+	}
+}
+
+func TestCommandRunnerTimeoutIsExplicit(t *testing.T) {
+	runner := CommandRunner{Timeout: time.Nanosecond}
+	_, err := runner.Output(t.TempDir(), "rev-parse", "--show-toplevel")
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("timeout error = %v, want context deadline exceeded", err)
+	}
+}
+
+func TestProbeDetectsStashAndUniqueLocalTags(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	createRepository(t, repo, "https://github.com/ukyovfx/Context-Bridge.git")
+	if err := os.WriteFile(filepath.Join(repo, "tracked.txt"), []byte("stashed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo, "stash", "push", "-m", "saved local work")
+	if err := os.WriteFile(filepath.Join(repo, "tagged.txt"), []byte("tagged\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo, "add", "tagged.txt")
+	git(t, repo, "commit", "-m", "local tagged work")
+	git(t, repo, "tag", "local-only")
+	probe, err := (Prober{}).Probe(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if probe.StashCount == 0 || probe.LocalTagUniqueCount == 0 {
+		t.Fatalf("local unique work was incomplete: stash=%d tag=%d probe=%#v", probe.StashCount, probe.LocalTagUniqueCount, probe)
+	}
+	if !containsWorkspaceState(probe.States(), core.StateHasLocalUniqueWork) {
+		t.Fatalf("unique-work state missing: %#v", probe.States())
+	}
+}
+
+func TestValidateIdentityPathRejectsWindowsReparseAlias(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows reparse-point coverage")
+	}
+	realRoot := t.TempDir()
+	linkParent := t.TempDir()
+	alias := filepath.Join(linkParent, "alias")
+	cmd := exec.Command("cmd", "/c", "mklink", "/J", alias, realRoot)
+	if data, err := cmd.CombinedOutput(); err != nil {
+		t.Skipf("junction creation unavailable: %v: %s", err, data)
+	}
+	if err := ValidateIdentityPath(alias); err == nil {
+		t.Fatal("reparse alias was accepted")
+	}
+}
+
+func containsWorkspaceState(states []core.WorkspaceState, wanted core.WorkspaceState) bool {
+	for _, state := range states {
+		if state == wanted {
+			return true
+		}
+	}
+	return false
 }
 
 func TestDiscoveryFindsIndependentClonesWithoutMutation(t *testing.T) {

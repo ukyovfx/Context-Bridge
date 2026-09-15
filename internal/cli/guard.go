@@ -64,6 +64,9 @@ func selectWorkspace(value core.Registry, repositoryID, selector string) (core.W
 	}
 	actualPath := cwd
 	if selector != "" && (filepath.IsAbs(selector) || selector == ".") {
+		if err := workspace.ValidateIdentityPath(selector); err != nil {
+			return core.WorkspaceRecord{}, "", err
+		}
 		actualPath, err = workspace.CanonicalPath(selector)
 		if err != nil {
 			return core.WorkspaceRecord{}, "", err
@@ -90,7 +93,7 @@ func selectWorkspace(value core.Registry, repositoryID, selector string) (core.W
 }
 
 func guardExpected(project core.ProjectRecord, repository core.RepositoryRecord, registered core.WorkspaceRecord, fingerprint string) core.GuardExpected {
-	return core.GuardExpected{ProjectID: project.ID, RepositoryID: repository.ID, WorkspaceID: registered.ID, PathKey: registered.PathKey, GitRootKey: registered.GitRootKey, GitDirKey: registered.GitDirKey, GitCommonDirKey: registered.GitCommonDirKey, PrimaryRemote: repository.Identity, BranchPolicy: core.BranchPolicy{Branch: repository.CanonicalBranch}, PlannedFingerprint: fingerprint}
+	return core.GuardExpected{ProjectID: project.ID, RepositoryID: repository.ID, WorkspaceID: registered.ID, PathKey: registered.PathKey, GitRootKey: registered.GitRootKey, GitDirKey: registered.GitDirKey, GitCommonDirKey: registered.GitCommonDirKey, PhysicalIdentity: registered.PhysicalIdentity, PrimaryRemote: repository.Identity, BranchPolicy: core.BranchPolicy{Branch: repository.CanonicalBranch}, PlannedFingerprint: fingerprint}
 }
 
 func failGuard(stderr io.Writer, reason core.GuardReason) error {
@@ -111,10 +114,15 @@ type liveGuardVerifier struct {
 	Repository core.RepositoryRecord
 	Workspace  core.WorkspaceRecord
 	Path       string
+	Prober     workspace.Prober
 }
 
 func (v liveGuardVerifier) Verify(expected core.GuardExpected) error {
-	probe, err := (workspace.Prober{PrimaryRemoteName: v.Repository.PrimaryRemoteName}).Probe(v.Path)
+	prober := v.Prober
+	if prober.Runner == nil {
+		prober = workspace.Prober{PrimaryRemoteName: v.Repository.PrimaryRemoteName}
+	}
+	probe, err := prober.Probe(v.Path)
 	if err != nil {
 		return core.WrongWorkspaceError{Reasons: []core.GuardReason{core.ReasonIdentityChangedAfterPlan}}
 	}

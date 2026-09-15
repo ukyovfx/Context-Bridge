@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"runtime"
 	"strings"
 )
 
@@ -10,15 +11,18 @@ const WrongWorkspace = "WRONG_WORKSPACE"
 type GuardReason string
 
 const (
-	ReasonProjectNotFound          GuardReason = "PROJECT_NOT_FOUND"
-	ReasonRepositoryMismatch       GuardReason = "REPOSITORY_MISMATCH"
-	ReasonWorkspacePathMismatch    GuardReason = "WORKSPACE_PATH_MISMATCH"
-	ReasonGitRootMismatch          GuardReason = "GIT_ROOT_MISMATCH"
-	ReasonGitDirMismatch           GuardReason = "GIT_DIR_MISMATCH"
-	ReasonGitCommonDirMismatch     GuardReason = "GIT_COMMON_DIR_MISMATCH"
-	ReasonPrimaryRemoteMismatch    GuardReason = "PRIMARY_REMOTE_MISMATCH"
-	ReasonBranchMismatch           GuardReason = "BRANCH_MISMATCH"
-	ReasonIdentityChangedAfterPlan GuardReason = "IDENTITY_CHANGED_AFTER_PLAN"
+	ReasonProjectNotFound               GuardReason = "PROJECT_NOT_FOUND"
+	ReasonRepositoryMismatch            GuardReason = "REPOSITORY_MISMATCH"
+	ReasonWorkspacePathMismatch         GuardReason = "WORKSPACE_PATH_MISMATCH"
+	ReasonGitRootMismatch               GuardReason = "GIT_ROOT_MISMATCH"
+	ReasonGitDirMismatch                GuardReason = "GIT_DIR_MISMATCH"
+	ReasonGitCommonDirMismatch          GuardReason = "GIT_COMMON_DIR_MISMATCH"
+	ReasonPrimaryRemoteMismatch         GuardReason = "PRIMARY_REMOTE_MISMATCH"
+	ReasonBranchMismatch                GuardReason = "BRANCH_MISMATCH"
+	ReasonIncompleteProbeEvidence       GuardReason = "INCOMPLETE_PROBE_EVIDENCE"
+	ReasonFilesystemIdentityUnavailable GuardReason = "FILESYSTEM_IDENTITY_UNAVAILABLE"
+	ReasonFilesystemIdentityMismatch    GuardReason = "FILESYSTEM_IDENTITY_MISMATCH"
+	ReasonIdentityChangedAfterPlan      GuardReason = "IDENTITY_CHANGED_AFTER_PLAN"
 )
 
 type BranchPolicy struct {
@@ -27,16 +31,17 @@ type BranchPolicy struct {
 }
 
 type GuardExpected struct {
-	ProjectID          string         `json:"project_id"`
-	RepositoryID       string         `json:"repository_id"`
-	WorkspaceID        string         `json:"workspace_id"`
-	PathKey            string         `json:"path_key"`
-	GitRootKey         string         `json:"git_root_key"`
-	GitDirKey          string         `json:"git_dir_key"`
-	GitCommonDirKey    string         `json:"git_common_dir_key"`
-	PrimaryRemote      RemoteIdentity `json:"primary_remote"`
-	BranchPolicy       BranchPolicy   `json:"branch_policy"`
-	PlannedFingerprint string         `json:"planned_fingerprint,omitempty"`
+	ProjectID          string                      `json:"project_id"`
+	RepositoryID       string                      `json:"repository_id"`
+	WorkspaceID        string                      `json:"workspace_id"`
+	PathKey            string                      `json:"path_key"`
+	GitRootKey         string                      `json:"git_root_key"`
+	GitDirKey          string                      `json:"git_dir_key"`
+	GitCommonDirKey    string                      `json:"git_common_dir_key"`
+	PrimaryRemote      RemoteIdentity              `json:"primary_remote"`
+	BranchPolicy       BranchPolicy                `json:"branch_policy"`
+	PlannedFingerprint string                      `json:"planned_fingerprint,omitempty"`
+	PhysicalIdentity   WorkspaceFilesystemIdentity `json:"physical_identity,omitempty"`
 }
 
 type GuardActual struct {
@@ -55,6 +60,16 @@ type GuardDecision struct {
 
 func EvaluateGuard(expected GuardExpected, actual GuardActual) GuardDecision {
 	reasons := make([]GuardReason, 0)
+	if len(actual.Probe.EvidenceErrors) > 0 {
+		reasons = append(reasons, ReasonIncompleteProbeEvidence)
+	}
+	if runtime.GOOS == "windows" {
+		if !expected.PhysicalIdentity.Complete() || !actual.Probe.PhysicalIdentity.Complete() {
+			reasons = append(reasons, ReasonFilesystemIdentityUnavailable)
+		} else if !expected.PhysicalIdentity.Equal(actual.Probe.PhysicalIdentity) {
+			reasons = append(reasons, ReasonFilesystemIdentityMismatch)
+		}
+	}
 	if !actual.ProjectFound || expected.ProjectID == "" || actual.ProjectID != expected.ProjectID {
 		reasons = append(reasons, ReasonProjectNotFound)
 	}

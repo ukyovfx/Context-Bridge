@@ -38,6 +38,12 @@ func TestHandoffResolvesAliasRunsGuardAndDoesNotMutate(t *testing.T) {
 	if result.Handoff.TaskIntent != "Fix notification card layout" || !result.Handoff.Guard.Allowed {
 		t.Fatalf("handoff task or guard mismatch: %#v", result.Handoff)
 	}
+	if result.Handoff.Recommendation.Model != "GPT-5.6 Luna" || result.Handoff.Recommendation.ReasoningLevel != "Medium" {
+		t.Fatalf("unexpected default model recommendation: %#v", result.Handoff.Recommendation)
+	}
+	if !strings.Contains(result.Handoff.ExecutionPrompt, "Read applicable AGENTS.md") || !strings.Contains(result.Handoff.ExecutionPrompt, "Preserve unrelated dirty work") {
+		t.Fatalf("execution prompt omitted repository contract: %s", result.Handoff.ExecutionPrompt)
+	}
 	if result.Handoff.RepositoryIdentity.Path != "ukyovfx/pilot" {
 		t.Fatalf("unexpected repository identity: %#v", result.Handoff.RepositoryIdentity)
 	}
@@ -46,6 +52,51 @@ func TestHandoffResolvesAliasRunsGuardAndDoesNotMutate(t *testing.T) {
 	}
 	if after := directorySnapshot(t, fixture.repository); before != after {
 		t.Fatalf("handoff mutated the registered repository\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+}
+
+func TestHandoffCreditStateIsExplicitAndRiskDoesNotDowngrade(t *testing.T) {
+	fixture := newHandoffFixture(t)
+	t.Setenv("CONTEXTBRIDGE_HOME", fixture.registryHome)
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"handoff", fixture.project.ID, "--task", "Review the security authentication migration", "--credit-state", "critical", "--json"}, &stdout, &stderr, "test"); code != 0 {
+		t.Fatalf("handoff failed: %s", stderr.String())
+	}
+	var result handoffResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Handoff.Recommendation.CreditState != "critical" || result.Handoff.Recommendation.ReasoningLevel != "High" {
+		t.Fatalf("critical risk recommendation was downgraded or invented: %#v", result.Handoff.Recommendation)
+	}
+	stdout.Reset()
+	if code := Run([]string{"handoff", fixture.project.ID, "--task", "Review", "--credit-state", "not-real", "--json"}, &stdout, &stderr, "test"); code == 0 {
+		t.Fatal("invalid credit state unexpectedly succeeded")
+	}
+}
+
+func TestHandoffReadOnlyPromptAndRegisteredPathResolution(t *testing.T) {
+	fixture := newHandoffFixture(t)
+	t.Setenv("CONTEXTBRIDGE_HOME", fixture.registryHome)
+	if err := os.WriteFile(filepath.Join(fixture.repository, "docs", "agent", "CURRENT-STATE.md"), []byte("# Current State\nprovenance unavailable\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"handoff", fixture.repository, "--task", "Establish current state. Report only status. Do not modify files.", "--credit-state", "normal", "--json"}, &stdout, &stderr, "test"); code != 0 {
+		t.Fatalf("path handoff failed: %s", stderr.String())
+	}
+	var result handoffResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Handoff.TaskIntentType != "read_only" {
+		t.Fatalf("task was not classified read-only: %#v", result.Handoff)
+	}
+	if strings.Contains(result.Handoff.ExecutionPrompt, "Implement the requested change") || strings.Contains(result.Handoff.ExecutionPrompt, "go test ./...") {
+		t.Fatalf("read-only handoff prompt forced implementation work: %s", result.Handoff.ExecutionPrompt)
+	}
+	if !strings.Contains(result.Handoff.ExecutionPrompt, "current-state documentation as a lead") {
+		t.Fatalf("unverified state warning was omitted: %s", result.Handoff.ExecutionPrompt)
 	}
 }
 

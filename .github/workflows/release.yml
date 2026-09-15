@@ -1,0 +1,41 @@
+name: Release verification
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Existing release tag to verify (for example v1.2.0-rc.1)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify-release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Run release verification and build
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          ./scripts/release.ps1 -Version "${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}" -IncludeInstaller
+      - name: Report artifact listing
+        shell: pwsh
+        run: Get-ChildItem (Join-Path $PWD ("dist\release-" + "${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}")) -File | Select-Object Name,Length
+      - name: Retain release artifacts for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: contextbridge-${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+          path: dist/release-${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}/*
+          if-no-files-found: error

@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ukyovfx/Context-Bridge/internal/codexbootstrap"
 	"github.com/ukyovfx/Context-Bridge/internal/core"
 	"github.com/ukyovfx/Context-Bridge/internal/state"
 	"github.com/ukyovfx/Context-Bridge/internal/workspace"
@@ -57,19 +58,20 @@ type readinessSummary struct {
 }
 
 type codexDiagnostics struct {
-	CodexHome                  string   `json:"codex_home,omitempty"`
-	GlobalInstructionPaths     []string `json:"global_instruction_paths,omitempty"`
-	GlobalInstructionsPresent  bool     `json:"global_instructions_present"`
-	ProjectDocMaxBytes         int      `json:"project_doc_max_bytes,omitempty"`
-	ProjectDocMaxBytesKnown    bool     `json:"project_doc_max_bytes_known"`
-	CumulativeInstructionBytes int      `json:"cumulative_instruction_bytes"`
-	PredictedTruncationRisk    string   `json:"predicted_truncation_risk"`
-	SandboxMode                string   `json:"sandbox_mode,omitempty"`
-	WritableRoots              []string `json:"writable_roots,omitempty"`
-	WritableRootsKnown         bool     `json:"writable_roots_known"`
-	ApprovalPolicy             string   `json:"approval_policy,omitempty"`
-	SecurityConfiguration      string   `json:"security_configuration,omitempty"`
-	ConfigurationObservable    bool     `json:"configuration_observable"`
+	CodexHome                  string                `json:"codex_home,omitempty"`
+	GlobalInstructionPaths     []string              `json:"global_instruction_paths,omitempty"`
+	GlobalInstructionsPresent  bool                  `json:"global_instructions_present"`
+	ProjectDocMaxBytes         int                   `json:"project_doc_max_bytes,omitempty"`
+	ProjectDocMaxBytesKnown    bool                  `json:"project_doc_max_bytes_known"`
+	CumulativeInstructionBytes int                   `json:"cumulative_instruction_bytes"`
+	PredictedTruncationRisk    string                `json:"predicted_truncation_risk"`
+	SandboxMode                string                `json:"sandbox_mode,omitempty"`
+	WritableRoots              []string              `json:"writable_roots,omitempty"`
+	WritableRootsKnown         bool                  `json:"writable_roots_known"`
+	ApprovalPolicy             string                `json:"approval_policy,omitempty"`
+	SecurityConfiguration      string                `json:"security_configuration,omitempty"`
+	ConfigurationObservable    bool                  `json:"configuration_observable"`
+	GlobalRouter               codexbootstrap.Report `json:"global_router"`
 }
 
 type claudeDiagnostics struct {
@@ -107,6 +109,8 @@ type agentDiagnostics struct {
 	Readiness        readinessSummary    `json:"readiness"`
 	Warnings         []diagnosticIssue   `json:"warnings"`
 	Errors           []diagnosticIssue   `json:"errors"`
+	WorkspaceProfile string              `json:"workspace_profile_status"`
+	SafeNextAction   string              `json:"safe_next_action"`
 }
 
 type instructionResult struct {
@@ -182,7 +186,9 @@ func diagnoseAgent(root, agent string) instructionResult {
 		diagnostics.CumulativeBytes += source.Bytes
 	}
 	diagnostics.Codex, diagnostics.Claude, diagnostics.Cursor = diagnoseEnvironment(diagnostics.ProjectRoot, canonical, agent, diagnostics.InstructionChain, diagnostics.CumulativeBytes)
+	diagnostics.WorkspaceProfile, _ = localProfileStatus()
 	deriveDiagnosticWarnings(diagnostics)
+	diagnostics.SafeNextAction = diagnosticNextAction(*diagnostics)
 	diagnostics.Readiness = makeReadiness(diagnostics)
 	if len(diagnostics.Errors) > 0 {
 		result.Status = readinessFailed
@@ -242,10 +248,10 @@ func projectForRepository(value core.Registry, repositoryID string) (core.Projec
 func discoverInstructionSources(projectRoot, cwd, agent string) []instructionSource {
 	paths := make([]struct{ scope, path string }, 0)
 	if agent == "codex" {
-		paths = append(paths, discoverChain(projectRoot, cwd, []string{"AGENTS.md", "AGENTS.override.md"})...)
 		for _, path := range codexGlobalPaths() {
 			paths = append(paths, struct{ scope, path string }{"global", path})
 		}
+		paths = append(paths, discoverCodexChain(projectRoot, cwd)...)
 	} else if agent == "claude" {
 		paths = append(paths, discoverChain(projectRoot, cwd, []string{"CLAUDE.md", "CLAUDE.local.md"})...)
 		for _, path := range claudeGlobalPaths() {
@@ -288,18 +294,51 @@ func discoverChain(projectRoot, cwd string, names []string) []struct{ scope, pat
 	return paths
 }
 
+func discoverCodexChain(projectRoot, cwd string) []struct{ scope, path string } {
+	root := filepath.Clean(projectRoot)
+	current := filepath.Clean(cwd)
+	directories := make([]string, 0)
+	for {
+		directories = append(directories, current)
+		if workspace.PathKey(current) == workspace.PathKey(root) || filepath.Dir(current) == current {
+			break
+		}
+		current = filepath.Dir(current)
+	}
+	sort.Slice(directories, func(i, j int) bool { return pathDepth(directories[i]) < pathDepth(directories[j]) })
+	paths := make([]struct{ scope, path string }, 0)
+	for _, directory := range directories {
+		for _, name := range []string{"AGENTS.override.md", "AGENTS.md"} {
+			path := filepath.Join(directory, name)
+			data, err := os.ReadFile(path)
+			if err != nil || len(data) == 0 {
+				continue
+			}
+			paths = append(paths, struct{ scope, path string }{"project", path})
+			break
+		}
+	}
+	return paths
+}
+
 func pathDepth(path string) int {
 	return len(strings.FieldsFunc(filepath.Clean(path), func(r rune) bool { return r == '/' || r == '\\' }))
 }
 
 func codexGlobalPaths() []string {
-	home, _ := os.UserHomeDir()
 	codexHome := os.Getenv("CODEX_HOME")
 	if codexHome == "" {
+		home, _ := os.UserHomeDir()
 		codexHome = filepath.Join(home, ".codex")
-		return uniquePaths([]string{filepath.Join(home, "AGENTS.md"), filepath.Join(codexHome, "AGENTS.md")})
 	}
-	return uniquePaths([]string{filepath.Join(codexHome, "AGENTS.md")})
+	for _, name := range []string{"AGENTS.override.md", "AGENTS.md"} {
+		path := filepath.Join(codexHome, name)
+		data, err := os.ReadFile(path)
+		if err == nil && len(data) > 0 {
+			return []string{path}
+		}
+	}
+	return nil
 }
 
 func claudeGlobalPaths() []string {
@@ -358,6 +397,14 @@ func diagnoseEnvironment(root, cwd, agent string, sources []instructionSource, c
 			codexHome = filepath.Join(home, ".codex")
 		}
 		configuration := parseCodexConfig(filepath.Join(codexHome, "config.toml"))
+		router, routerErr := codexbootstrap.Inspect()
+		if routerErr != nil {
+			router = codexbootstrap.Report{
+				Status:         codexbootstrap.StatusUnreadable,
+				Warnings:       []string{"CODEX_GLOBAL_ROUTER_UNREADABLE"},
+				SafeNextAction: "verify CODEX_HOME and read access before bootstrapping",
+			}
+		}
 		global := false
 		for _, source := range sources {
 			if source.Scope == "global" {
@@ -370,7 +417,7 @@ func diagnoseEnvironment(root, cwd, agent string, sources []instructionSource, c
 				globalPaths = append(globalPaths, source.Path)
 			}
 		}
-		return &codexDiagnostics{CodexHome: codexHome, GlobalInstructionPaths: globalPaths, GlobalInstructionsPresent: global, ProjectDocMaxBytes: configuration.maxBytes, ProjectDocMaxBytesKnown: configuration.maxBytes > 0, CumulativeInstructionBytes: cumulative, PredictedTruncationRisk: truncationRisk(cumulative, configuration.maxBytes), SandboxMode: configuration.sandbox, WritableRoots: configuration.writableRoots, WritableRootsKnown: configuration.writableRootsKnown, ApprovalPolicy: configuration.approval, SecurityConfiguration: configuration.security, ConfigurationObservable: configuration.observable}, nil, nil
+		return &codexDiagnostics{CodexHome: codexHome, GlobalInstructionPaths: globalPaths, GlobalInstructionsPresent: global, ProjectDocMaxBytes: configuration.maxBytes, ProjectDocMaxBytesKnown: configuration.maxBytes > 0, CumulativeInstructionBytes: cumulative, PredictedTruncationRisk: truncationRisk(cumulative, configuration.maxBytes), SandboxMode: configuration.sandbox, WritableRoots: configuration.writableRoots, WritableRootsKnown: configuration.writableRootsKnown, ApprovalPolicy: configuration.approval, SecurityConfiguration: configuration.security, ConfigurationObservable: configuration.observable, GlobalRouter: router}, nil, nil
 	}
 	if agent == "claude" {
 		config := os.Getenv("CLAUDE_CONFIG_DIR")
@@ -516,6 +563,17 @@ func deriveDiagnosticWarnings(diagnostics *agentDiagnostics) {
 	if diagnostics.Codex != nil && (!diagnostics.Codex.ConfigurationObservable || !diagnostics.Codex.WritableRootsKnown) {
 		appendDiagnosticWarning(diagnostics, "AGENT_CONFIG_UNVERIFIED")
 	}
+	if diagnostics.Codex != nil {
+		for _, warning := range diagnostics.Codex.GlobalRouter.Warnings {
+			appendDiagnosticWarning(diagnostics, warning)
+		}
+		switch diagnostics.Codex.GlobalRouter.Status {
+		case codexbootstrap.StatusMissing:
+			appendDiagnosticWarning(diagnostics, "CODEX_GLOBAL_ROUTER_MISSING")
+		case codexbootstrap.StatusUnreadable:
+			appendDiagnosticWarning(diagnostics, "CODEX_GLOBAL_ROUTER_UNREADABLE")
+		}
+	}
 }
 
 func appendDiagnosticWarning(diagnostics *agentDiagnostics, reason string) {
@@ -553,6 +611,22 @@ func warningFor(reason string) diagnosticIssue {
 		issue.Severity = "warning"
 		issue.Message = "The observed writable scope does not include a verified workspace."
 		issue.Action = "review agent write scope before allowing mutations."
+	case "CODEX_GLOBAL_ROUTER_MISSING":
+		issue.Severity = "warning"
+		issue.Message = "The Context Bridge block is not present in the Codex global instruction file."
+		issue.Action = "run contextbridge setup --codex-bootstrap --confirm after reviewing its preview."
+	case "CODEX_GLOBAL_ROUTER_UNREADABLE":
+		issue.Severity = "warning"
+		issue.Message = "The Codex global instruction file could not be safely inspected."
+		issue.Action = "verify CODEX_HOME and read access before bootstrapping."
+	case "CODEX_GLOBAL_OVERRIDE_PRESENT":
+		issue.Severity = "warning"
+		issue.Message = "Codex uses AGENTS.override.md instead of the base global AGENTS.md."
+		issue.Action = "review the override and add the Context Bridge guidance there if appropriate."
+	case "CODEX_GLOBAL_MANAGED_BLOCK_CONFLICT", "CODEX_GLOBAL_MANAGED_BLOCK_CHANGED":
+		issue.Severity = "warning"
+		issue.Message = "The existing Context Bridge managed block needs manual review."
+		issue.Action = "review the marked block before changing it."
 	}
 	return issue
 }
@@ -590,10 +664,38 @@ func makeReadiness(diagnostics *agentDiagnostics) readinessSummary {
 		git = readinessWarning
 	}
 	overall := readinessReady
-	if len(diagnostics.Warnings) > 0 || sandbox == readinessWarning || size == readinessWarning {
+	if hasDiagnosticWarning(diagnostics.Warnings) || sandbox == readinessWarning || size == readinessWarning {
 		overall = readinessWarned
 	}
 	return readinessSummary{WorkspaceGuard: diagnostics.WorkspaceGuard, InstructionChain: chain, OverrideFiles: override, InstructionSize: size, SandboxScope: sandbox, GitEnvironment: git, Overall: overall}
+}
+
+func hasDiagnosticWarning(issues []diagnosticIssue) bool {
+	for _, issue := range issues {
+		if issue.Severity == "warning" || issue.Severity == "error" {
+			return true
+		}
+	}
+	return false
+}
+
+func diagnosticNextAction(diagnostics agentDiagnostics) string {
+	if diagnostics.WorkspaceProfile != "READY" {
+		return "run contextbridge setup --workspace-root <absolute-path> --confirm"
+	}
+	if diagnostics.Codex != nil {
+		if action := diagnostics.Codex.GlobalRouter.SafeNextAction; action != "" {
+			if diagnostics.Codex.GlobalRouter.Status != codexbootstrap.StatusReady {
+				return action
+			}
+		}
+	}
+	for _, issue := range diagnostics.Warnings {
+		if issue.Severity == "warning" && issue.Action != "" {
+			return issue.Action
+		}
+	}
+	return "none; no action required"
 }
 
 func changedFromBasis(root, path string) string {
@@ -643,7 +745,7 @@ func emitInstructionResult(writer io.Writer, result instructionResult, jsonOutpu
 		return
 	}
 	d := result.Diagnostics
-	fmt.Fprintf(writer, "Agent: %s\nEffective cwd: %s\nProject root: %s\n", d.Agent, d.EffectiveCWD, d.ProjectRoot)
+	fmt.Fprintf(writer, "Agent: %s\nEffective cwd: %s\nProject root: %s\nWorkspace profile: %s\n", d.Agent, d.EffectiveCWD, d.ProjectRoot, d.WorkspaceProfile)
 	fmt.Fprintf(writer, "Workspace Guard: %s\nInstruction chain: %s\nOverride files: %s\nInstruction size: %s\nSandbox scope: %s\nGit environment: %s\nOverall: %s\n", d.Readiness.WorkspaceGuard, d.Readiness.InstructionChain, d.Readiness.OverrideFiles, d.Readiness.InstructionSize, d.Readiness.SandboxScope, d.Readiness.GitEnvironment, d.Readiness.Overall)
 	for _, issue := range d.Warnings {
 		fmt.Fprintf(writer, "%s %s\n", strings.ToUpper(issue.Severity), issue.Reason)
@@ -660,6 +762,12 @@ func emitInstructionResult(writer io.Writer, result instructionResult, jsonOutpu
 		if issue.Action != "" {
 			fmt.Fprintf(writer, "  Action: %s\n", issue.Action)
 		}
+	}
+	if d.SafeNextAction != "" {
+		fmt.Fprintf(writer, "Safe next action: %s\n", d.SafeNextAction)
+	}
+	if d.Agent == "codex" && d.Codex != nil {
+		fmt.Fprintf(writer, "Codex global router: %s\n", d.Codex.GlobalRouter.Status)
 	}
 	if d.Agent == "claude" && d.Claude != nil && !d.Claude.InstructionSourcesDetected {
 		fmt.Fprintln(writer, "Claude instructions: none detected")

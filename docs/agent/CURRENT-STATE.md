@@ -7,7 +7,7 @@ basis_date: 2026-09-10T14:59:35Z
 
 # Context Bridge Current State
 
-Status: Knowledge Write-back V1 implemented on top of V1.2.0-rc.1; local verification passed; hosted CI remains externally blocked from the prior release-candidate audit
+Status: Packaging / Onboarding V1 frozen after completion audit; installer, portable distribution, and CLI onboarding verified locally; hosted CI remains externally blocked
 
 ## Implemented
 
@@ -24,6 +24,14 @@ Status: Knowledge Write-back V1 implemented on top of V1.2.0-rc.1; local verific
 - V1.2.x human summaries with explicit PASS/WARNING/BLOCKED terminal labels, deduplicated warning metadata, clear provenance wording, explicit absent Claude/Cursor configuration diagnostics, and distinct Git target/probe/access failure reasons
 - Shared read-only Git probe classification is used by migration, guard, handoff, doctor, instructions, and discovery paths; it distinguishes genuine non-Git targets from inaccessible or failed Git probes without changing Git configuration
 - Minimal deterministic Knowledge Write-back V1 with `NONE`, `ACTIVE`, `DURABLE_RECORD`, and gated `ACCEPTED_STATE` classes; immutable JSON plan/apply separation, identity and worktree precondition revalidation, secret-like content refusal, canonical Markdown routing, and read-only `knowledge doctor`
+- Packaging / Onboarding V1 Phase 1 machine bootstrap: setup now previews and explicitly applies one machine-local workspace profile plus optional Codex global router bootstrap, preserving unrelated instruction content and refusing override or managed-block conflicts
+- Codex instruction diagnostics now match Codex precedence: one non-empty global override or base file first, followed by one non-empty project instruction file per directory from repository root toward the current directory
+- Read-only agent diagnostics now report workspace profile status, Codex global router status, conflicts/warnings, and an exact safe next action
+- Packaging / Onboarding V1 Phase 2 `new <project>` command: profile-rooted local-first creation under `active`, existing scaffold reuse, automatic project/repository/canonical-workspace registration, explicit `--github` opt-in, and zero-mutation dry-run
+- Packaging / Onboarding V1 Phase 3 `integrate <path>` flow: read-only probe and context inspection, one plan, conservative additive routing, existing-repository manifest adoption, canonical registration, immediate identity revalidation, and idempotent dry-run/apply behavior
+- Packaging / Onboarding V1 Phase 4 read-only `bootstrap chatgpt <project>` output: registered-project resolution, fresh Guard/readiness checks, portable repository identity and entrypoints, explicit GitHub visibility limits, local dirty/unpushed warnings, deterministic human/JSON output, and reuse of the generated ChatGPT instruction template
+- Packaging / Onboarding V1 Phase 5 distribution: per-user Windows installer definition, portable ZIP packaging, preserved user PATH management, data-preserving uninstall, deterministic archive timestamps, release checksums/manifest, and GitHub Actions artifact-retention workflow
+- Packaging / Onboarding V1 Phase 5 disposable packaging E2E: standalone binary, fresh-shell version check, setup/profile creation, Codex isolation, new project, existing-project integration, and ChatGPT bootstrap
 
 ## Verified on Windows
 
@@ -42,18 +50,18 @@ Status: Knowledge Write-back V1 implemented on top of V1.2.0-rc.1; local verific
 - Migration regression coverage proves adopt of clean/dirty repositories, owned-file conflict, V1-to-V2 upgrade, recoverable backup, repeated no-op, unknown-newer refusal, rebind move, unrelated repository rejection, confirmation, registry-only mutation, and identity-change abort
 - UX/diagnostics regression coverage proves concise human output, warning severity/action mapping, warning deduplication, absent Claude/Cursor configuration reporting, and inaccessible-Git versus non-Git migration probe classification
 - Packaged binary success-path smoke timing was measured in a trusted temporary fixture: version 20.6 ms median, guard 674.3 ms, handoff 1316.1 ms, doctor --agent codex 2183.7 ms, and instructions --explain --agent codex 1122.7 ms; five runs each, all exit 0
-- RC.1 package metadata reports `contextbridge 1.2.0-rc.1`; release notes are in `docs/releases/v1.2.0-rc.1.md`; no tag or GitHub release was created because hosted CI remains externally blocked
+- The prior `v1.2.0-rc.1` release-candidate notes remain historical; no stable tag or GitHub release has been created
 - Unit and integration tests cover wrong path/Git root/git-dir/common-dir/remote/branch, linked worktrees, independent clones, detached HEAD, local-only unique evidence, and identity change between plan and apply
 - Knowledge Write-back regression coverage proves NONE zero-byte behavior, active and durable routing, deterministic JSON, malformed proposal refusal, secret-like content refusal, identity-change abort, accepted-state downgrade and successful promotion, no automatic Git mutation, and read-only knowledge diagnostics
+- Packaging / Onboarding regression coverage proves setup dry-run zero mutation, explicit confirmation, idempotency, temporary Codex HOME isolation, preservation of existing global instructions, managed-block conflict refusal, stale-plan refusal, Codex precedence ordering, and profile/router diagnostics
+- New-project regression coverage proves configured active-root resolution, exact target paths, dry-run zero mutation, local registration, existing-target refusal, invalid-profile refusal, and explicit GitHub planning
+- Existing-project integration regression coverage proves clean and dirty repositories, AGENTS preservation, existing-route no-op, instruction conflicts, existing/missing manifests, dry-run zero mutation, repeated no-op, identity-change refusal, and registry-backed canonical registration
+- ChatGPT bootstrap regression coverage proves registered-project and alias resolution, Guard and canonical-workspace refusal, GitHub and local-only readiness, deterministic human/JSON output, zero mutation, template consistency, path redaction, and concise copyable output
+- Local release verification produced Windows and Linux portable archives plus `SHA256SUMS` and `release-manifest.json`; the local host did not have Inno Setup, so installer compilation and installer E2E remain unverified here
 - Packaged binary smoke proved registry resolution, NONE plan/apply, ACTIVE plan/apply, canonical active-plan routing, and machine-readable knowledge-doctor warnings in a disposable local fixture
-
-## GitHub verification
-
-- Repository: `ukyovfx/Context-Bridge`
-- Visibility: private
-- Default branch: `main`
-- Reviewed product basis: `c9d094a` (Knowledge Write-back V1 implementation commit; final state metadata follows)
-- Remote repository is private; default branch is `main`; remote consistency is verified after each authorized push
+- Final Windows installer audit passed with Inno Setup 7.1.0: clean per-user install, fresh-shell PATH/version resolution, setup with isolated Codex bootstrap, `new`, `integrate`, ChatGPT bootstrap, same-version reinstall, state preservation, PATH de-duplication, uninstall, repository preservation, unrelated instruction preservation, and fresh-shell non-resolution after uninstall
+- Final release artifacts include the Windows installer, Windows portable ZIP, Linux archive, `SHA256SUMS`, and `release-manifest.json`; independent hashes matched, manifest version was `v1.2.0-phase5-test.1`, and the portable binary reported the same version
+- Final installer audit found no repository/temp path, signing-secret marker, or private-key marker in the installer payload; the installer metadata reported product version `1.2.0-phase5-test.1`
 
 ## External blocker
 

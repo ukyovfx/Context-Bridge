@@ -174,7 +174,7 @@ func generatedFiles(req InitRequest) map[string]string {
 		"docs/agent/plans/active/.gitkeep": "",
 	}
 	if req.Profile == "openai" {
-		files["CHATGPT-PROJECT-INSTRUCTIONS.md"] = generatedChatGPTInstructions(req.Name)
+		files["CHATGPT-PROJECT-INSTRUCTIONS.md"] = ChatGPTProjectInstructions(req.Name)
 	}
 	return files
 }
@@ -226,6 +226,6 @@ func generatedCurrentState(name string) string {
 	return fmt.Sprintf("---\ncontextbridge_state_schema: 1\nbasis_branch: main\nbasis_commit: \"\"\nbasis_date: \"\"\n---\n\n# %s Current State\n\nStatus: initialized; basis not yet verified\n\n## Verified state\n\n- New local Git repository created by Context Bridge.\n- No implementation milestone has been recorded yet.\n\n## Next action\n\nRecord accepted state after reviewing a product commit.\n", name)
 }
 
-func generatedChatGPTInstructions(name string) string {
+func ChatGPTProjectInstructions(name string) string {
 	return fmt.Sprintf("# ChatGPT Project Instructions\n\nThis ChatGPT Project is exclusively for `%s`. Use the connected repository, `AGENTS.md`, `docs/agent/START-HERE.md`, `docs/agent/CURRENT-STATE.md`, and relevant code, tests, CI, and repository documentation as authoritative sources. Treat chat context as unverified until repository evidence confirms it.\n\nChatGPT handles research, requirements, planning, review, and Codex prompt generation. Codex handles repository inspection, implementation, verification, Git operations, and durable write-back.\n", name)
 }

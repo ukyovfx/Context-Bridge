@@ -1,13 +1,25 @@
 package core
 
-import "testing"
+import (
+	"runtime"
+	"testing"
+)
 
 func validGuardValues() (GuardExpected, GuardActual) {
 	remote := RemoteIdentity{Host: "github.com", Path: "ukyovfx/Context-Bridge"}
-	probe := WorkspaceProbe{PathKey: "c:/repo", GitRootKey: "c:/repo", GitDirKey: "c:/repo/.git", GitCommonDirKey: "c:/repo/.git", Branch: "main", PrimaryRemote: &remote, Fingerprint: "abc"}
-	expected := GuardExpected{ProjectID: "p", RepositoryID: "r", WorkspaceID: "w", PathKey: probe.PathKey, GitRootKey: probe.GitRootKey, GitDirKey: probe.GitDirKey, GitCommonDirKey: probe.GitCommonDirKey, PrimaryRemote: remote, BranchPolicy: BranchPolicy{Branch: "main"}, PlannedFingerprint: "abc"}
+	physical := testPhysicalIdentity()
+	probe := WorkspaceProbe{PathKey: "c:/repo", GitRootKey: "c:/repo", GitDirKey: "c:/repo/.git", GitCommonDirKey: "c:/repo/.git", Branch: "main", PrimaryRemote: &remote, Fingerprint: "abc", PhysicalIdentity: physical}
+	expected := GuardExpected{ProjectID: "p", RepositoryID: "r", WorkspaceID: "w", PathKey: probe.PathKey, GitRootKey: probe.GitRootKey, GitDirKey: probe.GitDirKey, GitCommonDirKey: probe.GitCommonDirKey, PhysicalIdentity: physical, PrimaryRemote: remote, BranchPolicy: BranchPolicy{Branch: "main"}, PlannedFingerprint: "abc"}
 	actual := GuardActual{ProjectFound: true, ProjectID: "p", RepositoryID: "r", WorkspaceID: "w", Probe: probe}
 	return expected, actual
+}
+
+func testPhysicalIdentity() WorkspaceFilesystemIdentity {
+	workspace := FilesystemIdentity{VolumeSerialNumber: 1, FileID: "01010101010101010101010101010101"}
+	root := FilesystemIdentity{VolumeSerialNumber: 1, FileID: "02020202020202020202020202020202"}
+	gitDir := FilesystemIdentity{VolumeSerialNumber: 1, FileID: "03030303030303030303030303030303"}
+	common := FilesystemIdentity{VolumeSerialNumber: 1, FileID: "04040404040404040404040404040404"}
+	return WorkspaceFilesystemIdentity{WorkspaceRoot: &workspace, GitRoot: &root, GitDir: &gitDir, GitCommonDir: &common}
 }
 
 func TestEvaluateGuardAllowsExactIdentity(t *testing.T) {
@@ -44,6 +56,29 @@ func TestEvaluateGuardFailsClosedForEveryIdentityDimension(t *testing.T) {
 				t.Fatalf("unexpected guard decision: %#v", decision)
 			}
 		})
+	}
+}
+
+func TestEvaluateGuardFailsClosedForIncompleteProbeEvidence(t *testing.T) {
+	expected, actual := validGuardValues()
+	actual.Probe.EvidenceErrors = []string{"status_unavailable"}
+	decision := EvaluateGuard(expected, actual)
+	if decision.Allowed || decision.PublicCode != WrongWorkspace || !containsReason(decision.Reasons, ReasonIncompleteProbeEvidence) {
+		t.Fatalf("incomplete probe evidence was accepted: %#v", decision)
+	}
+}
+
+func TestEvaluateGuardFailsClosedForFilesystemIdentityMismatch(t *testing.T) {
+	expected, actual := validGuardValues()
+	if actual.Probe.PhysicalIdentity.WorkspaceRoot == nil {
+		t.Fatal("test identity missing")
+	}
+	changed := *actual.Probe.PhysicalIdentity.WorkspaceRoot
+	changed.FileID = "ffffffffffffffffffffffffffffffff"
+	actual.Probe.PhysicalIdentity.WorkspaceRoot = &changed
+	decision := EvaluateGuard(expected, actual)
+	if decision.Allowed && runtime.GOOS == "windows" {
+		t.Fatal("filesystem identity mismatch was accepted on Windows")
 	}
 }
 

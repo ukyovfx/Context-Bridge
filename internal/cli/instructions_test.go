@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ukyovfx/Context-Bridge/internal/codexbootstrap"
 )
 
 func TestInstructionsCodexReportsChainLimitsAndRedactsContents(t *testing.T) {
@@ -16,10 +18,10 @@ func TestInstructionsCodexReportsChainLimitsAndRedactsContents(t *testing.T) {
 		t.Fatal(err)
 	}
 	secret := "super-secret-token-value"
-	if err := os.WriteFile(filepath.Join(nested, "AGENTS.md"), []byte(strings.Repeat("instruction "+secret+"\n", 20)), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(nested, "AGENTS.md"), []byte("project instruction\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(nested, "AGENTS.override.md"), []byte("override\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(nested, "AGENTS.override.md"), []byte(strings.Repeat("override "+secret+"\n", 20)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	codexHome := t.TempDir()
@@ -42,8 +44,11 @@ func TestInstructionsCodexReportsChainLimitsAndRedactsContents(t *testing.T) {
 	if result.Status != readinessWarned || result.Diagnostics.Codex == nil || result.Diagnostics.Codex.PredictedTruncationRisk != "EXCEEDS_LIMIT" {
 		t.Fatalf("unexpected codex diagnostics: %#v", result)
 	}
-	if len(result.Diagnostics.InstructionChain) < 4 || !hasDiagnosticReason(result.Diagnostics.Warnings, "INSTRUCTION_OVERRIDE_PRESENT") {
+	if len(result.Diagnostics.InstructionChain) != 3 || !hasDiagnosticReason(result.Diagnostics.Warnings, "INSTRUCTION_OVERRIDE_PRESENT") {
 		t.Fatalf("instruction chain or override warning missing: %#v", result.Diagnostics)
+	}
+	if result.Diagnostics.InstructionChain[0].Path != filepath.Join(codexHome, "AGENTS.md") || result.Diagnostics.InstructionChain[1].Path != filepath.Join(fixture.repository, "AGENTS.md") || result.Diagnostics.InstructionChain[2].Path != filepath.Join(nested, "AGENTS.override.md") {
+		t.Fatalf("Codex precedence order was incorrect: %#v", result.Diagnostics.InstructionChain)
 	}
 	if strings.Contains(stdout.String(), secret) || strings.Contains(stdout.String(), "token-value") {
 		t.Fatalf("instruction contents leaked into diagnostics: %s", stdout.String())
@@ -151,6 +156,27 @@ func TestInstructionsRejectsUnknownAgent(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	if code := Run([]string{"instructions", "--explain", "--agent", "unknown"}, &stdout, &stderr, "test"); code == 0 || !strings.Contains(stderr.String(), "agent must be codex") {
 		t.Fatalf("unknown agent was not rejected: stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
+func TestCodexDiagnosticsReportProfileRouterAndSafeAction(t *testing.T) {
+	fixture := newHandoffFixture(t)
+	codexHome := filepath.Join(t.TempDir(), "codex")
+	t.Setenv("CONTEXTBRIDGE_HOME", filepath.Join(t.TempDir(), "contextbridge"))
+	t.Setenv("CODEX_HOME", codexHome)
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"instructions", "--explain", "--project", fixture.repository, "--agent", "codex", "--json"}, &stdout, &stderr, "test"); code != 0 {
+		t.Fatalf("diagnostics failed: %s", stderr.String())
+	}
+	var result instructionResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Diagnostics.WorkspaceProfile != "NOT_CONFIGURED" || result.Diagnostics.Codex == nil || result.Diagnostics.Codex.GlobalRouter.Status != codexbootstrap.StatusMissing {
+		t.Fatalf("profile or router status missing: router=%#v diagnostics=%#v", result.Diagnostics.Codex.GlobalRouter, result.Diagnostics)
+	}
+	if !strings.Contains(result.Diagnostics.SafeNextAction, "contextbridge setup --workspace-root") || !hasDiagnosticReason(result.Diagnostics.Warnings, "CODEX_GLOBAL_ROUTER_MISSING") {
+		t.Fatalf("safe action or router warning missing: %#v", result.Diagnostics)
 	}
 }
 

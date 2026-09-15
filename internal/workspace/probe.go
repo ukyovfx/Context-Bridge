@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -14,8 +15,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ukyovfx/Context-Bridge/internal/core"
+	"github.com/ukyovfx/Context-Bridge/internal/safety"
 )
 
 type GitRunner interface {
@@ -32,14 +35,41 @@ const (
 	ProbeGitProbeFailed            ProbeStatus = "GIT_PROBE_FAILED"
 )
 
-type CommandRunner struct{}
+const defaultProbeTimeout = 10 * time.Second
 
-func (CommandRunner) Output(directory string, args ...string) ([]byte, error) {
+type CommandRunner struct {
+	Timeout time.Duration
+}
+
+func (r CommandRunner) Output(directory string, args ...string) ([]byte, error) {
 	base := []string{"--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "maintenance.auto=false", "-c", "gc.auto=0"}
-	cmd := exec.Command("git", append(base, args...)...)
+	timeout := r.Timeout
+	if timeout <= 0 {
+		timeout = defaultProbeTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", append(base, args...)...)
 	cmd.Dir = directory
-	cmd.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0")
-	return cmd.Output()
+	cmd.Env = sanitizedGitEnvironment()
+	output, err := cmd.Output()
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	return output, err
+}
+
+func sanitizedGitEnvironment() []string {
+	blocked := map[string]bool{"GIT_DIR": true, "GIT_WORK_TREE": true, "GIT_INDEX_FILE": true}
+	env := make([]string, 0, len(os.Environ())+2)
+	for _, entry := range os.Environ() {
+		name, _, ok := strings.Cut(entry, "=")
+		if ok && blocked[strings.ToUpper(name)] {
+			continue
+		}
+		env = append(env, entry)
+	}
+	return append(env, "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0")
 }
 
 type Prober struct {
@@ -56,11 +86,14 @@ func (p Prober) ProbeWithStatus(path string) (core.WorkspaceProbe, ProbeStatus, 
 		}
 		return core.WorkspaceProbe{}, ProbeGitProbeFailed, err
 	}
+	if err := ValidateIdentityPath(path); err != nil {
+		return core.WorkspaceProbe{}, ProbeGitProbeFailed, err
+	}
 	canonical, err := CanonicalPath(path)
 	if err != nil {
 		return core.WorkspaceProbe{}, ProbeGitProbeFailed, err
 	}
-	probe, err := p.Probe(canonical)
+	probe, err := p.Probe(path)
 	if err != nil {
 		return core.WorkspaceProbe{}, ProbeGitProbeFailed, err
 	}
@@ -80,6 +113,9 @@ func (p Prober) Probe(path string) (core.WorkspaceProbe, error) {
 	if p.PrimaryRemoteName == "" {
 		p.PrimaryRemoteName = "origin"
 	}
+	if err := ValidateIdentityPath(path); err != nil {
+		return core.WorkspaceProbe{}, err
+	}
 	canonical, err := CanonicalPath(path)
 	if err != nil {
 		return core.WorkspaceProbe{}, err
@@ -92,6 +128,11 @@ func (p Prober) Probe(path string) (core.WorkspaceProbe, error) {
 	}
 	gitRoot, err := p.output(canonical, "rev-parse", "--show-toplevel")
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			probe.EvidenceErrors = append(probe.EvidenceErrors, "git_probe_timeout")
+			probe.Fingerprint = fingerprint(probe)
+			return probe, nil
+		}
 		probe.Topology = core.TopologyNonGit
 		probe.Fingerprint = fingerprint(probe)
 		return probe, nil
@@ -103,7 +144,9 @@ func (p Prober) Probe(path string) (core.WorkspaceProbe, error) {
 	probe.GitRootKey = PathKey(probe.GitRoot)
 	gitDir, err := p.output(canonical, "rev-parse", "--absolute-git-dir")
 	if err != nil {
-		return core.WorkspaceProbe{}, errors.New("git_dir_unavailable")
+		probe.EvidenceErrors = append(probe.EvidenceErrors, probeErrorCode("git_dir_unavailable", err))
+		probe.Fingerprint = fingerprint(probe)
+		return probe, nil
 	}
 	probe.GitDir, err = canonicalOutputPath(gitDir)
 	if err != nil {
@@ -112,7 +155,9 @@ func (p Prober) Probe(path string) (core.WorkspaceProbe, error) {
 	probe.GitDirKey = PathKey(probe.GitDir)
 	commonDir, err := p.output(canonical, "rev-parse", "--path-format=absolute", "--git-common-dir")
 	if err != nil {
-		return core.WorkspaceProbe{}, errors.New("git_common_dir_unavailable")
+		probe.EvidenceErrors = append(probe.EvidenceErrors, probeErrorCode("git_common_dir_unavailable", err))
+		probe.Fingerprint = fingerprint(probe)
+		return probe, nil
 	}
 	probe.GitCommonDir, err = canonicalOutputPath(commonDir)
 	if err != nil {
@@ -140,8 +185,34 @@ func (p Prober) Probe(path string) (core.WorkspaceProbe, error) {
 	p.collectStatus(&probe, canonical)
 	p.collectRefs(&probe, canonical)
 	p.collectWorktrees(&probe, canonical)
+	collectFilesystemIdentity(&probe)
 	probe.Fingerprint = fingerprint(probe)
 	return probe, nil
+}
+
+func collectFilesystemIdentity(probe *core.WorkspaceProbe) {
+	if !safety.FilesystemIdentitySupported() {
+		return
+	}
+	entries := []struct {
+		name string
+		path string
+		set  func(*core.FilesystemIdentity)
+	}{
+		{"workspace_root", probe.CanonicalPath, func(v *core.FilesystemIdentity) { probe.PhysicalIdentity.WorkspaceRoot = v }},
+		{"git_root", probe.GitRoot, func(v *core.FilesystemIdentity) { probe.PhysicalIdentity.GitRoot = v }},
+		{"git_dir", probe.GitDir, func(v *core.FilesystemIdentity) { probe.PhysicalIdentity.GitDir = v }},
+		{"git_common_dir", probe.GitCommonDir, func(v *core.FilesystemIdentity) { probe.PhysicalIdentity.GitCommonDir = v }},
+	}
+	for _, entry := range entries {
+		identity, err := safety.FilesystemIdentity(entry.path)
+		if err != nil {
+			probe.EvidenceErrors = append(probe.EvidenceErrors, "filesystem_identity_unavailable_"+entry.name)
+			continue
+		}
+		value := core.FilesystemIdentity{VolumeSerialNumber: identity.VolumeSerialNumber, FileID: identity.FileID}
+		entry.set(&value)
+	}
 }
 
 func (p Prober) collectRemotes(probe *core.WorkspaceProbe, directory string) {
@@ -219,6 +290,18 @@ func (p Prober) collectStatus(probe *core.WorkspaceProbe, directory string) {
 	if err != nil {
 		probe.EvidenceErrors = append(probe.EvidenceErrors, "unique_commits_invalid")
 	}
+	stash, stashErr := p.output(directory, "stash", "list", "--format=%H")
+	if stashErr != nil {
+		probe.EvidenceErrors = append(probe.EvidenceErrors, "stash_unavailable")
+	} else {
+		probe.StashCount = len(nonEmptyLines(stash))
+	}
+	tagUnique, tagErr := p.output(directory, "rev-list", "--count", "--tags", "--not", "--remotes")
+	if tagErr != nil {
+		probe.EvidenceErrors = append(probe.EvidenceErrors, "unique_tag_commits_unavailable")
+	} else if probe.LocalTagUniqueCount, err = strconv.Atoi(strings.TrimSpace(string(tagUnique))); err != nil {
+		probe.EvidenceErrors = append(probe.EvidenceErrors, "unique_tag_commits_invalid")
+	}
 }
 
 func (p Prober) collectRefs(probe *core.WorkspaceProbe, directory string) {
@@ -250,6 +333,51 @@ func (p Prober) collectWorktrees(probe *core.WorkspaceProbe, directory string) {
 
 func (p Prober) output(directory string, args ...string) ([]byte, error) {
 	return p.Runner.Output(directory, args...)
+}
+
+func probeErrorCode(code string, err error) string {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "git_probe_timeout"
+	}
+	return code
+}
+
+// ValidateIdentityPath rejects reparse aliases on Windows before canonicalizing
+// the path. Other platforms retain their existing symlink behavior.
+func ValidateIdentityPath(path string) error {
+	if runtime.GOOS != "windows" {
+		return nil
+	}
+	current, err := filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+	for {
+		_, statErr := os.Lstat(current)
+		if errors.Is(statErr, os.ErrNotExist) {
+			parent := filepath.Dir(current)
+			if parent == current {
+				return nil
+			}
+			current = parent
+			continue
+		}
+		if statErr != nil {
+			return fmt.Errorf("inspect workspace identity path: %w", statErr)
+		}
+		linked, linkErr := safety.IsLinkOrReparse(current)
+		if linkErr != nil {
+			return fmt.Errorf("inspect workspace identity path: %w", linkErr)
+		}
+		if linked {
+			return errors.New("workspace identity path contains a symlink or reparse point")
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return nil
+		}
+		current = parent
+	}
 }
 
 func CanonicalPath(path string) (string, error) {
