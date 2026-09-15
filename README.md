@@ -210,6 +210,6 @@ V1.2 has no persistent Task or AgentSession model, managed worktree lifecycle, c
 
 Hosted CI passed for the reviewed release basis commit. No stable tag or GitHub Release has been published yet; publication remains an explicit release action.
 
-## Pilot boundary
+## Pilot boundary and post-V1 direction
 
-Context Bridge remains the identity, Guard, context-integrity, and verified-handoff layer. An external repository retrieval companion and an optional plain-Markdown Brain may improve context selection, but Git/GitHub remain authoritative and neither companion nor Brain is required project state. Obsidian is optional Markdown UI only. See [`docs/agent/CONTEXT-ARCHITECTURE.md`](docs/agent/CONTEXT-ARCHITECTURE.md) and [`docs/agent/PILOT.md`](docs/agent/PILOT.md) for the replaceable companion boundary, Brain convention, selection order, and 30-day local measurement plan.
+Context Bridge remains the identity, exact Git-state, context-integrity, Guard, verified-handoff, and controlled project-truth write-back layer. V1.2 is frozen for verification and release; no new retrieval, Brain, or GitHub features are included. After release, one final controlled Repowise source-only A/B benchmark must produce a GO/NO-GO decision before feature work resumes. Repowise is optional pilot tooling, Brain notes are manual and optional, and Git/GitHub remain authoritative. No feature without observed pain: add only the smallest solution to a recurring problem that existing Core, Git, `AGENTS.md`, repository docs, or `rg` cannot solve. See [`docs/agent/CONTEXT-ARCHITECTURE.md`](docs/agent/CONTEXT-ARCHITECTURE.md) and [`docs/agent/PILOT.md`](docs/agent/PILOT.md) for the replaceable boundary and pilot evidence.

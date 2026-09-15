@@ -15,7 +15,7 @@ Before writing in a registered workspace, run and obey Workspace Guard. Stop on 
 - Keep the V1 core deterministic and free of model or API calls.
 - Preserve Plan/apply separation and zero-mutation dry runs.
 - Never weaken non-overridable path, repository, account, or secret-safety aborts.
-- Do not add existing-repository adoption, organization support, destructive Git operations, automatic AI-Knowledge writes, a GUI, MCP, a vector database, or an Obsidian plugin in V1.
+- Do not expand beyond the implemented V1 core: Project/Repository/Workspace identity, exact Git-state binding, context integrity, Guard, verified handoff, and controlled project-truth write-back. Existing-repository integration is explicit and safety-gated. Do not add organization support, destructive Git operations, automatic AI-Knowledge writes, a GUI, MCP, a vector database, or an Obsidian plugin.
 - Stop before production writes, permission changes, secret handling, history rewriting, or unresolved high-impact decisions.
 
 ## Verification

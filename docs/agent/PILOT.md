@@ -4,30 +4,28 @@ The pilot compares context quality per model credit while keeping all
 measurements local and human-reviewable. It does not send telemetry, create a
 dashboard, or store personal Brain content in this repository.
 
-## Four-week sequence
+## Controlled sequence
 
 ### Week 1: baseline
 
 Run representative tasks with Context Bridge only. Resolve the project,
 verify Guard, inspect the instruction chain, and capture the JSON handoff.
 
-### Week 2: Repowise companion
+### Week 2: Repowise companion (incomplete)
 
 Use Repowise only as an external retrieval companion. Keep the same task set
 and Context Bridge checks. Record retrieval provenance and any repeated or
 irrelevant reads. Do not integrate Repowise internals into Context Bridge.
 
-### Week 3: Markdown Brain
+The current CLI retrieval work proves indexing, provenance, and retrieval
+operation, but efficiency benefit is not yet proven. Complete one final small,
+source-only A/B benchmark before making a GO/NO-GO retrieval decision.
 
-Add a small personal `HOT.md` and `INDEX.md` outside the repository. Load only
-the notes selected by the task. Keep repository evidence authoritative and
-record any conflict instead of merging it silently.
+### After the retrieval decision
 
-### Week 4: comparison
-
-Compare the three conditions: baseline, baseline plus retrieval companion, and
-baseline plus retrieval companion plus Brain. Review quality per credit, not
-token count alone, and record whether a human had to correct context.
+Stop feature work and use Context Bridge in real development. A Brain pilot,
+Serena comparison, autonomous Repowise MCP, Obsidian sync, or external-write
+automation requires observed recurring pain and a new explicit decision.
 
 ## Local measurement record
 

@@ -11,13 +11,17 @@ Context Bridge is a deterministic, local-first bridge for carrying development c
 5. `docs/agent/KNOWLEDGE-WRITEBACK.md` when durable knowledge routing is relevant
 6. Relevant code, tests, CI, and repository documentation
 
-## V1 boundaries
+## V1 boundaries and product direction
 
-V1.2 is a Windows-first CLI. It makes no model or model-provider API calls. Obsidian may display generated Markdown passively, but Context Bridge does not integrate with or write through an Obsidian plugin.
+V1.2 is a Windows-first CLI. Its core scope is Project, Repository, and Workspace identity, exact Git-state binding, context integrity, Guard, verified handoff, and controlled project-truth write-back. It makes no model or model-provider API calls. Obsidian may display generated Markdown passively, but Context Bridge does not integrate with or write through an Obsidian plugin.
 
-The CLI creates new projects and supports explicit, confirmed migration plans for existing repositories. Remote creation is limited to the authenticated user's personal GitHub account and always creates a private repository after the local project has been created and committed. Adoption, upgrade, and rebind are never automatic.
+The CLI creates new projects and supports explicit, confirmed integration and migration plans for existing repositories. Remote creation is limited to the authenticated user's personal GitHub account and always creates a private repository after the local project has been created and committed. Adoption, upgrade, rebind, and external writes are never automatic.
 
-V1.1 adds machine-local registration of existing repositories without modifying them. V1.2 adds explicit adopt, upgrade, and rebind plans with confirmation and immediate re-probe. Before Context Bridge-mediated writes in a registered workspace, run `contextbridge guard`; `WRONG_WORKSPACE` is a hard stop with no force override.
+Before Context Bridge-mediated writes in a registered workspace, run `contextbridge guard`; `WRONG_WORKSPACE` is a hard stop with no force override.
+
+No feature without observed pain. V1.2 scope is frozen for verification and release; it gains no new retrieval, Brain, or GitHub features. After release, complete one final controlled Repowise source-only A/B benchmark, make a GO/NO-GO retrieval decision, then use Context Bridge in real development. Add a subsystem only after a recurring real-world problem is observed and the smallest existing mechanism cannot solve it.
+
+Future proposals must ask whether the problem recurs, whether Core/Git/AGENTS.md/repository docs/`rg` already solve it, whether it belongs in Core, whether an optional adapter or policy is sufficient, and whether the measured benefit exceeds maintenance and complexity cost.
 
 ## Verification route
 

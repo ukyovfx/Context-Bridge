@@ -3,6 +3,39 @@
 This document defines the boundary for the post-V1 pilot. It does not add a
 runtime dependency, a new state store, or an automatic synchronization path.
 
+## Lean development direction
+
+V1.2 scope is frozen for verification and release. No new retrieval, Brain, or
+GitHub features are committed to V1.2. After release, complete one final
+controlled Repowise source-only A/B benchmark, make a GO/NO-GO retrieval
+decision, and then use Context Bridge in real development.
+
+No feature without observed pain: add a subsystem only after a recurring
+real-world problem is observed and the smallest existing mechanism cannot
+solve it. Before proposing a feature, ask whether Core, Git, `AGENTS.md`,
+repository documentation, or `rg` already solves the problem; whether it
+belongs in Core; whether an optional adapter, policy, or documentation is
+enough; and whether measured benefit exceeds maintenance and complexity cost.
+
+Repowise remains optional pilot tooling. There is no autonomous MCP work or
+Serena comparison now. If the final small-repository benchmark shows no
+material benefit, default to `rg` plus `AGENTS.md` and repository-native docs;
+Repowise may remain a future adapter for large or complex repositories.
+
+Do not implement a Brain subsystem now. `HOT.md` may be used manually when
+useful, but `INDEX.md`, Obsidian integration or synchronization, automation,
+and vector retrieval require observed need first. External Write Preflight is
+design guidance only; do not implement a GitHub write adapter, policy engine,
+or persistent state machine without repeated external-write mistakes or proof
+that policy and instructions are insufficient.
+
+The same gate explicitly postpones Serena, autonomous Repowise MCP, Obsidian
+sync, Brain automation, vector or semantic-memory infrastructure, generic agent
+orchestration, task-management/PKM features, and generic “AI Development OS”
+functionality. Optional retrieval, personal-context, and external-write
+helpers must remain removable and must not become Context Bridge core
+dependencies.
+
 ## Authority and roles
 
 - Git and GitHub are authoritative for project and repository truth.
@@ -52,8 +85,8 @@ The adapter boundary must be replaceable by another companion without changing
 Project/Repository/Workspace identity, Guard, manifests, registry state,
 write-back, or the CLI contract. No companion may write to a repository,
 Context Bridge state, or the Brain through this boundary. Repowise is the
-first pilot companion; Serena is a comparison/fallback, not a simultaneous
-integration.
+current optional pilot companion; another adapter is not justified until
+observed pain and a measured need establish it.
 
 ## Brain convention
 
